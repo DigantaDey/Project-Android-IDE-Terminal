@@ -52,7 +52,10 @@ socketpair/pipe/subprocess I/O, the network-on switch, Binder ioctl/ptrace/proce
 io_uring denials, and the x86 x32 guard. A JDK compiles and runs the actual JNI PTY
 launcher against host Bash ten times, checking cold-start output, terminal size,
 pipelines, foreground-job Ctrl-C, and a subsequent shell command. It never invokes
-the Android companion's UID-wide kill sweep. These Linux host cases supplement,
+the Android companion's UID-wide kill sweep. CI runs the PTY fixture under its own
+unprivileged UID so GitHub's runner/.NET/Node threads do not exhaust the actual
+64-task per-UID Android limit; the shipped launcher is not relaxed for testing.
+These Linux host cases supplement,
 not replace, required Android native execution/instrumentation.
 
 ## Core regressions

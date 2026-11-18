@@ -60,7 +60,15 @@ class NativePtyHostTests(unittest.TestCase):
             command = [str(compiler), "--release", "17"] if compiler.exists() else [java, "-jar", str(ecj), "-17"]
             command += ["-d", str(classes), str(ROOT / "native-runtime/src/main/java/com/forgeide/runtime/NativePty.java"), str(ROOT / "scripts/fixtures/NativePtyHostTest.java")]
             checked(command, timeout=30)
-            result = checked([java, "-XX:ActiveProcessorCount=2", "-XX:+UseSerialGC", "--add-opens", "java.base/java.io=ALL-UNNAMED", "-Djava.library.path=" + folder, "-cp", str(classes), "com.forgeide.runtime.NativePtyHostTest"], timeout=35)
+            user = os.environ.get("FORGE_NATIVE_HOST_TEST_USER")
+            prefix = ["sudo", "-n", "-u", user, "--"] if user else []
+            if user:
+                # Only public compiled fixtures are exposed to this disposable UID.
+                # Keep the production launcher's exact 64-task limit unchanged.
+                output.chmod(0o755)
+                for path in output.rglob("*"):
+                    path.chmod(0o755 if path.is_dir() or path.suffix == ".so" else 0o644)
+            result = checked(prefix + [java, "-XX:ActiveProcessorCount=2", "-XX:+UseSerialGC", "--add-opens", "java.base/java.io=ALL-UNNAMED", "-Djava.library.path=" + folder, "-cp", str(classes), "com.forgeide.runtime.NativePtyHostTest"], timeout=35)
             self.assertIn("10 real PTY cold starts, resize, pipes, foreground Ctrl-C and subsequent commands passed", result.stdout)
 
 
