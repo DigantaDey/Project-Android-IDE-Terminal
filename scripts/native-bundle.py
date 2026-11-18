@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import traceback
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,7 +55,9 @@ def signed_index(arch):
         source = Path(temp) / "InRelease"
         source.write_bytes(release)
         verified = Path(temp) / "Release"
-        subprocess.run(["gpgv", "--keyring", str(keyring), "--output", str(verified), str(source)], check=True)
+        check = subprocess.run(["gpgv", "--keyring", str(keyring), "--output", str(verified), str(source)], capture_output=True, text=True)
+        if check.returncode:
+            raise ValueError("Catalog signature verification failed: " + check.stderr)
         text = verified.read_text()
     relative = "main/binary-" + arch + "/Packages.xz"
     section = text.split("SHA256:\n", 1)[1].split("\n\n", 1)[0]
@@ -125,4 +128,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        detail = traceback.format_exc()[-3500:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+        print("::error title=Native bundle verification::" + detail, flush=True)
+        raise
