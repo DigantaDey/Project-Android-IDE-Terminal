@@ -181,7 +181,7 @@ public final class NativeTools {
                         "--noprofile",
                         "--norc",
                         "-c",
-                        "\"$1\" \"$2\" -o \"$3\" -lm || exit \"$?\"; shift 3; exec \"$@\"",
+                        "\"$1\" -fno-color-diagnostics \"$2\" -o \"$3\" -lm || exit \"$?\"; shift 3; exec \"$@\"",
                         "forge-build",
                         prefix + "/bin/" + (language.equals("cpp") ? "clang++" : "clang"),
                         project + "/" + file,
