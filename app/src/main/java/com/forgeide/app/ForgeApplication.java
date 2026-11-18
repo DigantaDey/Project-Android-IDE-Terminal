@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Process-lifetime workspace state; Activity recreation never destroys open documents or undo stacks. */
@@ -37,12 +38,15 @@ public final class ForgeApplication extends Application {
     public final List<OpenDocument> documents = new CopyOnWriteArrayList<>();
     public final List<Runnable> observers = new CopyOnWriteArrayList<>();
     public final List<String> logs = new CopyOnWriteArrayList<>();
+    public final BoundedLog output = new BoundedLog(262144);
+    public final Map<String, List<com.forgeide.core.terminal.TerminalSession>> terminalSessions =
+        new LinkedHashMap<>();
+    private final AtomicBoolean changeScheduled = new AtomicBoolean();
     public Workspace workspace;
     public RecoveryStore recovery;
     public ExecutionClient execution;
     public String project = "",
         activePath = "",
-        output = "",
         debugState = "",
         fatalError = "";
     public Path projects, stateDir;
@@ -88,9 +92,13 @@ public final class ForgeApplication extends Application {
     }
 
     public void changed() {
-        main.post(() -> {
-            for (Runnable r : observers) r.run();
-        });
+        if (changeScheduled.compareAndSet(false, true)) main.postDelayed(
+            () -> {
+                changeScheduled.set(false);
+                for (Runnable r : observers) r.run();
+            },
+            16
+        );
     }
 
     public void log(String message) {
@@ -135,6 +143,11 @@ public final class ForgeApplication extends Application {
                     List.of(),
                     List.of()
                 ).toJson()
+            );
+        } else if (template.equals("SQL")) {
+            w.write(
+                "main.sql",
+                "-- A fresh in-memory SQLite database is created for every run.\nCREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);\nINSERT INTO notes(title) VALUES ('Built with Forge');\nSELECT * FROM notes;\n"
             );
         } else if (template.equals("Web")) {
             w.write(
@@ -213,7 +226,15 @@ public final class ForgeApplication extends Application {
             log(e.getMessage());
         }
         if (documents.isEmpty()) {
-            for (String p : List.of("main.js", "index.html", "main.py", "main.cpp", "Main.java", "README.md"))
+            for (String p : List.of(
+                "main.js",
+                "main.sql",
+                "index.html",
+                "main.py",
+                "main.cpp",
+                "Main.java",
+                "README.md"
+            ))
                 if (Files.isRegularFile(workspace.resolve(p))) {
                     open(p);
                     break;

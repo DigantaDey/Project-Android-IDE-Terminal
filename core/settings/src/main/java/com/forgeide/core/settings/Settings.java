@@ -78,7 +78,9 @@ public final class Settings {
                     max = 1024;
                     break;
             }
-            if (n < min || n > max) throw new IllegalArgumentException(key + " must be " + min + "–" + max);
+            if (numeric < min || numeric > max) throw new IllegalArgumentException(
+                key + " must be " + min + "–" + max
+            );
             value = (long) n;
         } else if (def instanceof Boolean && !(value instanceof Boolean)) throw new IllegalArgumentException(
             "Expected boolean"
@@ -105,14 +107,22 @@ public final class Settings {
         } catch (RuntimeException e) {
             throw new IOException("Settings are invalid; original file has not been overwritten", e);
         }
-        for (Map.Entry<String, Object> e : values.entrySet())
-            if (global.containsKey(e.getKey())) {
-                try {
-                    set(e.getKey(), e.getValue(), perProject);
-                } catch (IllegalArgumentException ex) {
-                    throw new IOException("Invalid setting " + e.getKey(), ex);
+        Map<String, Object> target = perProject ? project : global;
+        Map<String, Object> before = new LinkedHashMap<>(target);
+        try {
+            for (Map.Entry<String, Object> e : values.entrySet())
+                if (global.containsKey(e.getKey())) {
+                    try {
+                        set(e.getKey(), e.getValue(), perProject);
+                    } catch (IllegalArgumentException ex) {
+                        throw new IOException("Invalid setting " + e.getKey(), ex);
+                    }
                 }
-            }
+        } catch (IOException failure) {
+            target.clear();
+            target.putAll(before);
+            throw failure;
+        }
     }
 
     public synchronized void save(Path file, boolean perProject) throws IOException {

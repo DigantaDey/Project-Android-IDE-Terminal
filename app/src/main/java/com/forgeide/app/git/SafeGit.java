@@ -185,7 +185,12 @@ public final class SafeGit implements GitService {
             formatter.setRepository(git().getRepository());
             formatter.setContext(3);
             if (file != null && !file.isEmpty()) formatter.setPathFilter(PathFilter.create(file));
-            for (org.eclipse.jgit.diff.DiffEntry e : git().diff().call()) formatter.format(e);
+            Repository repository = git().getRepository();
+            for (org.eclipse.jgit.diff.DiffEntry e : formatter.scan(
+                new org.eclipse.jgit.dircache.DirCacheIterator(repository.readDirCache()),
+                new org.eclipse.jgit.treewalk.FileTreeIterator(repository)
+            ))
+                formatter.format(e);
             formatter.flush();
         }
         String text = bytes.toString(StandardCharsets.UTF_8.name());

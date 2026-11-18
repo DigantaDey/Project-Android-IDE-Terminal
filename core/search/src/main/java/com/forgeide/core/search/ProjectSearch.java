@@ -59,6 +59,7 @@ public final class ProjectSearch {
                 line = 0;
             for (String content : text.split("\n", -1)) {
                 cancel.throwIfCancelled();
+                if (out.size() >= limit) break;
                 Matcher matcher = pattern.matcher(new BoundedText(content, 300));
                 while (out.size() < limit && matcher.find()) {
                     cancel.throwIfCancelled();
@@ -115,7 +116,9 @@ public final class ProjectSearch {
                     if (lineEnd < 0) lineEnd = text.length();
                     Matcher matcher = p.matcher(new BoundedText(text.substring(lineStart, lineEnd), 300));
                     if (
-                        !matcher.find(h.start - lineStart) || matcher.end() != h.end - lineStart
+                        !matcher.find(h.start - lineStart) ||
+                        matcher.start() != h.start - lineStart ||
+                        matcher.end() != h.end - lineStart
                     ) throw new IOException("Search result is stale");
                     StringBuffer buffer = new StringBuffer();
                     matcher.appendReplacement(buffer, replacement);

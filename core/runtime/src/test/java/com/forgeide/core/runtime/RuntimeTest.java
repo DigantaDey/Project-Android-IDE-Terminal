@@ -45,6 +45,63 @@ public class RuntimeTest {
     }
 
     @Test
+    public void stdoutAndStderrRemainSeparateWithASharedByteBudget() {
+        StringBuilder out = new StringBuilder(),
+            err = new StringBuilder();
+        JavaScriptRuntime.Result result = new JavaScriptRuntime().run(
+            "print('ok');console.error('bad');console.warn('warning');",
+            "streams.js",
+            List.of(),
+            Map.of(),
+            "",
+            SandboxPolicy.safeDefault(),
+            new CancellationToken(),
+            out::append,
+            err::append,
+            null
+        );
+        assertEquals(0, result.exitCode);
+        assertEquals("ok\n", out.toString());
+        assertEquals("bad\nwarning\n", err.toString());
+    }
+
+    @Test
+    public void androidStyleCovariantListArraysAreCopiedToObjectArrays() {
+        List<String> arguments = new AbstractList<String>() {
+            @Override
+            public String get(int i) {
+                return "value";
+            }
+
+            @Override
+            public int size() {
+                return 1;
+            }
+
+            @Override
+            public Object[] toArray() {
+                return new String[] { "value" };
+            }
+        };
+        StringBuilder output = new StringBuilder();
+        assertEquals(
+            0,
+            new JavaScriptRuntime().run(
+                "print(arguments[0]);",
+                "arguments.js",
+                arguments,
+                Map.of(),
+                "",
+                SandboxPolicy.safeDefault(),
+                new CancellationToken(),
+                output::append,
+                null
+            ).exitCode
+        );
+        assertEquals("value\n", output.toString());
+    }
+
+    @Test
     public void javaAndFilesystemAreNotExposed() {
         StringBuilder out = new StringBuilder();
         assertEquals(

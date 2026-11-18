@@ -55,11 +55,15 @@ public final class ExecutionClient {
     }
 
     public void cancel() {
+        cancel(null);
+    }
+
+    public void cancel(CompletableFuture<Integer> owner) {
         ActiveRun run;
         synchronized (this) {
             run = active;
         }
-        if (run == null) return;
+        if (run == null || (owner != null && run.result != owner)) return;
         run.cancelled = true;
         try {
             if (run.service != null) run.service.cancel();
@@ -169,12 +173,18 @@ public final class ExecutionClient {
                                 }
 
                                 @Override
+                                public void onErrorOutput(String text) {
+                                    if (!run.done.get()) errors.accept(text);
+                                }
+
+                                @Override
                                 public void onEvent(String json) {
                                     if (!run.done.get()) events.accept(json);
                                 }
 
                                 @Override
                                 public void onFinished(int exit, String error, int line, int column) {
+                                    if (run.done.get()) return;
                                     if (!error.isEmpty()) errors.accept(
                                         config.file +
                                             ":" +

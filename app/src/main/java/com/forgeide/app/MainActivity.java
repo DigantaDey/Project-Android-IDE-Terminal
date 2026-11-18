@@ -54,7 +54,8 @@ public final class MainActivity extends Activity {
     private final CommandRegistry commands = new CommandRegistry();
     private final Set<String> expanded = new HashSet<>();
     private final List<Diagnostic> problems = new ArrayList<>();
-    private final List<TerminalSession> terminals = new ArrayList<>();
+    private List<TerminalSession> terminals = new ArrayList<>();
+    private TerminalSession visibleTerminal;
     private final ExecutorService analysis = Executors.newSingleThreadExecutor();
     private CancellationToken taskCancel = new CancellationToken();
     private LinearLayout root, sidebar, treeRows, tabs, editorRow, panelBody, panel, terminalRoot;
@@ -546,6 +547,10 @@ public final class MainActivity extends Activity {
     }
 
     private void removeDocument(ForgeApplication.OpenDocument d) {
+        if (d.dirty()) {
+            toast("Document changed while saving; it was kept open");
+            return;
+        }
         d.detach();
         app.documents.remove(d);
         if (d == secondaryDoc) split();
@@ -573,7 +578,10 @@ public final class MainActivity extends Activity {
                 (d.dirty() ? "●  " : "") + fileName(d.path)
             );
         }
-        if (outputText != null && panelName.equals("Output")) outputText.setText(app.output);
+        if (outputText != null && panelName.equals("Output")) outputText.setText(app.output.toString());
+        if (
+            terminalText != null && visibleTerminal != null && panelName.equals("Terminal")
+        ) terminalText.setText(visibleTerminal.output());
         if (debugText != null && panelName.equals("Debugger")) debugText.setText(debugDescription());
     }
 
@@ -967,27 +975,31 @@ public final class MainActivity extends Activity {
     }
 
     private void folderMenu(String path) {
-        choose(path, List.of("New file / folder", "Rename / move folder", "Move folder to trash"), i -> {
-            if (i == 0) newItem(path);
-            else if (i == 2) trashItem(path);
-            else input("New project-relative folder path", path, next ->
-                fileChange(
-                    () -> {
-                        app.workspace.move(path, next);
-                        return next;
-                    },
-                    result -> {
-                        for (ForgeApplication.OpenDocument doc : app.documents)
-                            if (doc.path.startsWith(path + "/")) doc.path =
-                                result + doc.path.substring(path.length());
-                        expanded.remove(path);
-                        expanded.add(result);
-                        rebuildTabs();
-                        refreshTree();
-                    }
-                )
-            );
-        });
+        choose(
+            path,
+            List.of("New file / folder", "Rename / move folder", "Move folder to trash", "Duplicate folder"),
+            i -> {
+                if (i == 0) newItem(path);
+                else if (i == 2) trashItem(path);
+                else input("New project-relative folder path", path, next ->
+                    fileChange(
+                        () -> {
+                            app.workspace.move(path, next);
+                            return next;
+                        },
+                        result -> {
+                            for (ForgeApplication.OpenDocument doc : app.documents)
+                                if (doc.path.startsWith(path + "/")) doc.path =
+                                    result + doc.path.substring(path.length());
+                            expanded.remove(path);
+                            expanded.add(result);
+                            rebuildTabs();
+                            refreshTree();
+                        }
+                    )
+                );
+            }
+        );
     }
 
     private void projectMenu() {
@@ -1058,8 +1070,8 @@ public final class MainActivity extends Activity {
 
     private void newProject() {
         input("Project name", "", name ->
-            choose("Template", List.of("JavaScript", "Web", "Python", "C++", "Java", "Empty"), i -> {
-                String[] templates = { "JavaScript", "Web", "Python", "C++", "Java", "Empty" };
+            choose("Template", List.of("JavaScript", "SQL", "Web", "Python", "C++", "Java", "Empty"), i -> {
+                String[] templates = { "JavaScript", "SQL", "Web", "Python", "C++", "Java", "Empty" };
                 background(
                     "Creating project…",
                     () -> {
@@ -1344,7 +1356,7 @@ public final class MainActivity extends Activity {
                 tools.addView(action("■", "Stop", this::stop));
                 tools.addView(
                     action("⌫", "Clear output", () -> {
-                        app.output = "";
+                        app.output.clear();
                         showPanel("Output");
                     })
                 );
@@ -1363,7 +1375,7 @@ public final class MainActivity extends Activity {
                 outputText = scrollText(
                     app.output.isEmpty()
                         ? "Run a JavaScript file to see live stdout, errors and exit status here.\nNative toolchains are never silently substituted."
-                        : app.output
+                        : app.output.toString()
                 );
                 break;
             }
@@ -1437,9 +1449,19 @@ public final class MainActivity extends Activity {
 
     private void restoreTerminals() {
         if (lastTerminalProject.equals(app.project)) return;
-        terminals.clear();
         terminalIndex = 0;
         lastTerminalProject = app.project;
+        List<TerminalSession> retained = app.terminalSessions.get(app.project);
+        if (retained != null) {
+            terminals = retained;
+            for (TerminalSession session : terminals) attachTerminal(session);
+            return;
+        }
+        terminals = new ArrayList<>();
+        app.terminalSessions.put(app.project, terminals);
+        while (app.terminalSessions.size() > 4) app.terminalSessions.remove(
+            app.terminalSessions.keySet().iterator().next()
+        );
         try {
             Path file = terminalStatePath(app.project);
             if (Files.exists(file)) for (Object value : Json.parseArray(
@@ -1458,13 +1480,32 @@ public final class MainActivity extends Activity {
 
     private TerminalSession newTerminal(String id) {
         TerminalSession t = new TerminalSession(id, app.workspace);
+        attachTerminal(t);
+        return t;
+    }
+
+    private void attachTerminal(TerminalSession t) {
+        ForgeApplication state = app;
+        Workspace owner = app.workspace;
+        java.lang.ref.WeakReference<MainActivity> view = new java.lang.ref.WeakReference<>(this);
         t.register("run", (a, cwd, env, cancel) -> {
-            String path = a.size() > 1 ? (cwd.isEmpty() ? a.get(1) : cwd + "/" + a.get(1)) : null;
-            app.main.post(() -> startRun(false, path, t));
+            String path = a.size() > 1 ? t.resolvePath(a.get(1)) : null;
+            state.main.post(() -> {
+                MainActivity activity = view.get();
+                if (activity != null && !activity.destroyed && state.workspace == owner) activity.startRun(
+                    false,
+                    path,
+                    t,
+                    a.size() > 2 ? a.subList(2, a.size()) : List.of(),
+                    env,
+                    cwd
+                );
+                else t.append("No active project view; run was not started.\n");
+            });
             return TerminalSession.Result.ok("Launching in isolated sandbox…\n");
         });
         t.register("git", (a, cwd, env, cancel) -> {
-            try (SafeGit g = new SafeGit(app.workspace, new CredentialVault(this))) {
+            try (SafeGit g = new SafeGit(owner, new CredentialVault(state))) {
                 if (a.size() < 2 || a.get(1).equals("status")) return TerminalSession.Result.ok(
                     g.branch() + "\n" + g.status().toString() + "\n"
                 );
@@ -1486,7 +1527,6 @@ public final class MainActivity extends Activity {
                 }
             }
         });
-        return t;
     }
 
     private void persistTerminals() {
@@ -1507,6 +1547,7 @@ public final class MainActivity extends Activity {
         restoreTerminals();
         LinearLayout tools = row();
         TerminalSession terminal = terminals.get(Math.min(terminalIndex, terminals.size() - 1));
+        visibleTerminal = terminal;
         TextView name = label(terminal.id + "  ⌄", 12, accent);
         name.setMinHeight(dp(36));
         name.setOnClickListener(v -> {
@@ -1642,7 +1683,11 @@ public final class MainActivity extends Activity {
         );
         else try {
             JsonObject state = JsonObject.parse(app.debugState);
-            if (state.getString("event", "").equals("evaluation")) b
+            if (state.getString("event", "").equals("terminated")) b
+                .append("Debug session ended · exit ")
+                .append(state.getInt("exit", 1))
+                .append('\n');
+            else if (state.getString("event", "").equals("evaluation")) b
                 .append("Watch: ")
                 .append(state.getString("expression", ""))
                 .append(" = ")
@@ -1714,23 +1759,23 @@ public final class MainActivity extends Activity {
     }
 
     private void appendOutput(String value, TerminalSession terminal) {
-        synchronized (app) {
-            app.output += value;
-            if (app.output.length() > 262144) app.output = app.output.substring(app.output.length() - 262144);
-        }
+        app.output.append(value);
         if (terminal != null) terminal.append(value);
         app.changed();
-        app.main.post(() -> {
-            if (destroyed) return;
-            if (outputText != null && panelName.equals("Output")) outputText.setText(app.output);
-            if (
-                terminalText != null && panelName.equals("Terminal") && terminal != null
-            ) terminalText.setText(terminal.output());
-            refreshStatus();
-        });
     }
 
     private void startRun(boolean debug, String requestedFile, TerminalSession terminal) {
+        startRun(debug, requestedFile, terminal, null, null, null);
+    }
+
+    private void startRun(
+        boolean debug,
+        String requestedFile,
+        TerminalSession terminal,
+        List<String> launchArguments,
+        Map<String, String> launchEnvironment,
+        String launchDirectory
+    ) {
         if (app.isRunning()) {
             toast("Stop the active execution before starting another");
             return;
@@ -1791,7 +1836,7 @@ public final class MainActivity extends Activity {
                           List.of(),
                           List.of()
                       );
-                runWorkspace.resolve(base.workingDirectory);
+                runWorkspace.resolve(launchDirectory == null ? base.workingDirectory : launchDirectory);
                 if (
                     app.toolchains
                         .all()
@@ -1802,9 +1847,9 @@ public final class MainActivity extends Activity {
                     base.name,
                     provider.id(),
                     file,
-                    base.workingDirectory,
-                    base.arguments,
-                    base.environment,
+                    launchDirectory == null ? base.workingDirectory : launchDirectory,
+                    launchArguments == null ? base.arguments : launchArguments,
+                    launchEnvironment == null ? base.environment : launchEnvironment,
                     base.stdin,
                     base.buildCommand,
                     base.runCommand,
@@ -1820,14 +1865,15 @@ public final class MainActivity extends Activity {
                             toast("Project changed; run cancelled");
                             return;
                         }
-                        app.output =
+                        app.output.set(
                             "› " +
-                            (debug ? "Debug" : "Run") +
-                            " " +
-                            config.file +
-                            " · isolated " +
-                            config.toolchain +
-                            "\n";
+                                (debug ? "Debug" : "Run") +
+                                " " +
+                                config.file +
+                                " · isolated " +
+                                config.toolchain +
+                                "\n"
+                        );
                         app.debugState = "";
                         if (terminal == null) showPanel(debug ? "Debugger" : "Output");
                         SandboxPolicy policy = new SandboxPolicy(
@@ -1847,6 +1893,7 @@ public final class MainActivity extends Activity {
                                 json ->
                                     app.main.post(() -> {
                                         app.debugState = json;
+                                        app.changed();
                                         if (destroyed) return;
                                         try {
                                             JsonObject event = JsonObject.parse(json);
@@ -1877,10 +1924,16 @@ public final class MainActivity extends Activity {
                                         : "\n[run failed: " + message(error) + "]\n",
                                     terminal
                                 );
-                                app.buildHistory.add(app.output);
+                                app.buildHistory.add(app.output.toString());
+                                if (debug) {
+                                    app.debugState = Json.write(
+                                        Map.of("event", "terminated", "exit", exit == null ? 1 : exit)
+                                    );
+                                    app.changed();
+                                }
                                 app.main.post(() -> {
                                     problems.clear();
-                                    problems.addAll(BuildLog.diagnostics(app.output));
+                                    problems.addAll(BuildLog.diagnostics(app.output.toString()));
                                     refreshStatus();
                                     applyDiagnostics();
                                 });
@@ -1939,7 +1992,7 @@ public final class MainActivity extends Activity {
                 }
             },
             value -> {
-                app.output = value + "\n";
+                app.output.set(value + "\n");
                 showPanel("Output");
             }
         );

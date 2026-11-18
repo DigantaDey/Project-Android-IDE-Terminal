@@ -89,7 +89,7 @@ public final class ExecutionService extends Service {
                             },
                             error -> {
                                 try {
-                                    callback.onOutput(
+                                    callback.onErrorOutput(
                                         config.getString("file", "main.sql") + ":1:1: error: " + error + "\n"
                                     );
                                 } catch (RemoteException e) {
@@ -139,6 +139,13 @@ public final class ExecutionService extends Service {
                         text -> {
                             try {
                                 callback.onOutput(text);
+                            } catch (RemoteException e) {
+                                token.cancel();
+                            }
+                        },
+                        text -> {
+                            try {
+                                callback.onErrorOutput(text);
                             } catch (RemoteException e) {
                                 token.cancel();
                             }

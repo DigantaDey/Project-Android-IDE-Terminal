@@ -20,7 +20,11 @@ public final class OutputLimiter {
         this.consumer = consumer;
     }
 
-    public synchronized void accept(String text) {
+    public void accept(String text) {
+        acceptTo(text, consumer);
+    }
+
+    public synchronized void acceptTo(String text, Consumer<String> sink) {
         int end = 0,
             used = 0;
         while (end < text.length()) {
@@ -31,7 +35,7 @@ public final class OutputLimiter {
             end += Character.charCount(cp);
         }
         if (end > 0) {
-            consumer.accept(text.substring(0, end));
+            sink.accept(text.substring(0, end));
             remaining -= used;
         }
         if (end < text.length()) throw new LimitExceeded();

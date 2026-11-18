@@ -80,6 +80,10 @@ public final class TerminalSession {
         output.setLength(0);
     }
 
+    public synchronized String resolvePath(String value) throws IOException {
+        return path(value);
+    }
+
     private String path(String value) throws IOException {
         if (value.startsWith("/project/")) value = value.substring(9);
         else if (value.equals("/project") || value.equals("~")) value = "";
@@ -171,8 +175,8 @@ public final class TerminalSession {
                         if (workspace.isDirectory(p)) throw new IOException(
                             "Use the explorer's recoverable delete for directories"
                         );
-                        workspace.delete(p);
-                        return Result.ok("");
+                        new ProjectTrash(workspace).move(p);
+                        return Result.ok("Moved to project trash: " + p + "\n");
                     }
                 case "find":
                     return Result.ok(String.join("\n", workspace.files(10000)) + "\n");
