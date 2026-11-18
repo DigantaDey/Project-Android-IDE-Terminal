@@ -2,6 +2,7 @@ package com.forgeide.core.editor;
 
 /** Describes a single edit applied to a document. Carries enough data to invert it. */
 public final class TextChange {
+
     /** Offset at which the change begins. */
     public final int offset;
     /** Text removed by the change ("" for pure inserts). */

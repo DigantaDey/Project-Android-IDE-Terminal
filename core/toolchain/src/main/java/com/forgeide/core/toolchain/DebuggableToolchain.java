@@ -10,5 +10,14 @@ import java.util.function.Consumer;
 /** Optional capability, independent of the editor and of any particular debugger protocol. */
 public interface DebuggableToolchain extends Toolchain {
     boolean supportsDebug();
-    CompletableFuture<Integer> debug(String source,RunConfiguration config,SandboxPolicy policy,CancellationToken cancel,List<Breakpoints.Point> breakpoints,Consumer<String> stdout,Consumer<String> stderr,Consumer<String> events);
+    CompletableFuture<Integer> debug(
+        String source,
+        RunConfiguration config,
+        SandboxPolicy policy,
+        CancellationToken cancel,
+        List<Breakpoints.Point> breakpoints,
+        Consumer<String> stdout,
+        Consumer<String> stderr,
+        Consumer<String> events
+    );
 }

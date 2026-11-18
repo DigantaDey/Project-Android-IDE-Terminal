@@ -9,6 +9,7 @@ import java.util.Set;
  * tiling invariant: every byte of input belongs to exactly one token.
  */
 final class Scanner {
+
     final String text;
     final int n;
     int i;
@@ -148,8 +149,14 @@ final class Scanner {
         // 0x hex, 0b binary, 0o octal, floats, exponents, suffixes
         if (peek() == '0' && (peek(1) == 'x' || peek(1) == 'X')) {
             i += 2;
-            while (!atEnd() && (isDigit(peek()) || (peek() >= 'a' && peek() <= 'f')
-                    || (peek() >= 'A' && peek() <= 'F') || peek() == '_' || peek() == '\'')) {
+            while (
+                !atEnd() &&
+                (isDigit(peek()) ||
+                    (peek() >= 'a' && peek() <= 'f') ||
+                    (peek() >= 'A' && peek() <= 'F') ||
+                    peek() == '_' ||
+                    peek() == '\'')
+            ) {
                 i++;
             }
         } else if (peek() == '0' && (peek(1) == 'b' || peek(1) == 'B')) {
@@ -188,8 +195,16 @@ final class Scanner {
             }
         }
         // type suffixes (f, l, u, n, m...)
-        while (!atEnd() && (peek() == 'f' || peek() == 'F' || peek() == 'l' || peek() == 'L'
-                || peek() == 'u' || peek() == 'U' || peek() == 'n')) {
+        while (
+            !atEnd() &&
+            (peek() == 'f' ||
+                peek() == 'F' ||
+                peek() == 'l' ||
+                peek() == 'L' ||
+                peek() == 'u' ||
+                peek() == 'U' ||
+                peek() == 'n')
+        ) {
             i++;
         }
     }
@@ -202,7 +217,9 @@ final class Scanner {
         if (builtins != null && builtins.contains(word)) {
             return TokenType.BUILTIN;
         }
-        if (word.equals(word.toUpperCase()) && word.length() > 2 && word.chars().anyMatch(Character::isLetter)) {
+        if (
+            word.equals(word.toUpperCase()) && word.length() > 2 && word.chars().anyMatch(Character::isLetter)
+        ) {
             return TokenType.CONSTANT; // SCREAMING_CASE heuristic
         }
         if (!word.isEmpty() && Character.isUpperCase(word.charAt(0))) return TokenType.TYPE;

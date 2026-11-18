@@ -2,6 +2,7 @@ package com.forgeide.core.editor;
 
 /** Caret/selection state. A collapsed selection (anchor == caret) is just a caret. */
 public final class Selection {
+
     private int anchor;
     private int caret;
 

@@ -2,9 +2,9 @@ package com.forgeide.core.util;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.List;
 
 /**
  * Tiny logging facade. Core modules never depend on Android's Log; the app
@@ -13,13 +13,20 @@ import java.util.List;
  */
 public final class Logger {
 
-    public enum Level {VERBOSE, DEBUG, INFO, WARN, ERROR}
+    public enum Level {
+        VERBOSE,
+        DEBUG,
+        INFO,
+        WARN,
+        ERROR,
+    }
 
     public interface Sink {
         void log(Level level, String tag, String message, Throwable error);
     }
 
     public static final class Entry {
+
         public final long timestamp;
         public final Level level;
         public final String tag;
@@ -40,6 +47,7 @@ public final class Logger {
 
     /** Ring-buffer sink that retains the most recent entries (default 2000). */
     public static final class RingBufferSink implements Sink {
+
         private final int capacity;
         private final List<Entry> entries = new CopyOnWriteArrayList<>();
         private volatile Level minLevel = Level.DEBUG;
@@ -75,8 +83,7 @@ public final class Logger {
 
     private static volatile Sink sink = new RingBufferSink(2000);
 
-    private Logger() {
-    }
+    private Logger() {}
 
     public static void setSink(Sink newSink) {
         sink = newSink == null ? new RingBufferSink(2000) : newSink;

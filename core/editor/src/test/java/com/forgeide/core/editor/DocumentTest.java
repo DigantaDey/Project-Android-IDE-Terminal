@@ -1,11 +1,10 @@
 package com.forgeide.core.editor;
 
-import org.junit.Test;
+import static org.junit.Assert.*;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.Assert.*;
+import org.junit.Test;
 
 public class DocumentTest {
 
@@ -77,7 +76,7 @@ public class DocumentTest {
     @Test
     public void positionMappingRoundTrips() {
         Document d = new Document("ab\ncde\n\nf");
-        int[] expected = {0, 3, 7, 8};
+        int[] expected = { 0, 3, 7, 8 };
         for (int line = 0; line < d.lineCount(); line++) {
             assertEquals(expected[line], d.offsetAt(line, 0));
         }

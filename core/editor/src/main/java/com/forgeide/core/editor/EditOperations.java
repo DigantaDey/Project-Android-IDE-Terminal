@@ -6,8 +6,7 @@ package com.forgeide.core.editor;
  */
 public final class EditOperations {
 
-    private EditOperations() {
-    }
+    private EditOperations() {}
 
     /** Duplicates the given line below itself. */
     public static void duplicateLine(Document document, int line) {

@@ -33,5 +33,5 @@ public enum TokenType {
     LINK,
     QUOTE,
     LIST_MARKER,
-    ERROR
+    ERROR,
 }

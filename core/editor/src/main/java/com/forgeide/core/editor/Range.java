@@ -2,6 +2,7 @@ package com.forgeide.core.editor;
 
 /** An immutable range of text expressed in offsets into a document. */
 public final class Range {
+
     public final int start;
     public final int end;
 

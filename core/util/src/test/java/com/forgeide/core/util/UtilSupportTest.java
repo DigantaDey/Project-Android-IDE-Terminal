@@ -1,22 +1,22 @@
 package com.forgeide.core.util;
 
-import org.junit.Test;
-
 import static org.junit.Assert.*;
+
+import org.junit.Test;
 
 public class UtilSupportTest {
 
     @Test
     public void cancellationTokenFiresListeners() {
         CancellationToken token = new CancellationToken();
-        final boolean[] fired = {false};
+        final boolean[] fired = { false };
         token.onCancel(() -> fired[0] = true);
         assertFalse(token.isCancelled());
         token.cancel();
         assertTrue(token.isCancelled());
         assertTrue(fired[0]);
         // Listener registered after cancellation fires immediately
-        final boolean[] late = {false};
+        final boolean[] late = { false };
         token.onCancel(() -> late[0] = true);
         assertTrue(late[0]);
         try {
@@ -30,7 +30,7 @@ public class UtilSupportTest {
     @Test
     public void listenersAllowSelfRemovalDuringDispatch() {
         Listeners<Runnable> listeners = new Listeners<>();
-        final int[] calls = {0};
+        final int[] calls = { 0 };
         Runnable r = new Runnable() {
             @Override
             public void run() {

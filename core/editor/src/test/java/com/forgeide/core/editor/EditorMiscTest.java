@@ -1,11 +1,10 @@
 package com.forgeide.core.editor;
 
-import org.junit.Test;
+import static org.junit.Assert.*;
 
 import java.util.Arrays;
 import java.util.List;
-
-import static org.junit.Assert.*;
+import org.junit.Test;
 
 public class EditorMiscTest {
 
@@ -36,9 +35,7 @@ public class EditorMiscTest {
     @Test
     public void foldingVisibilityAndRowMapping() {
         FoldingModel model = new FoldingModel();
-        model.setRegions(Arrays.asList(
-                new FoldingRegion(1, 4, "braces"),
-                new FoldingRegion(2, 3, "braces")));
+        model.setRegions(Arrays.asList(new FoldingRegion(1, 4, "braces"), new FoldingRegion(2, 3, "braces")));
         assertTrue(model.fold(1));
         assertTrue(model.isLineVisible(1));
         assertFalse(model.isLineVisible(2));
@@ -54,10 +51,13 @@ public class EditorMiscTest {
     @Test
     public void foldAllOnlyFoldsTopLevel() {
         FoldingModel model = new FoldingModel();
-        model.setRegions(Arrays.asList(
+        model.setRegions(
+            Arrays.asList(
                 new FoldingRegion(0, 9, "braces"),
                 new FoldingRegion(2, 4, "braces"),
-                new FoldingRegion(11, 13, "braces")));
+                new FoldingRegion(11, 13, "braces")
+            )
+        );
         model.foldAll();
         assertTrue(model.isFolded(0));
         assertFalse(model.isFolded(2)); // nested

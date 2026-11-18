@@ -2,6 +2,7 @@ package com.forgeide.core.language;
 
 /** A lexical token: (start, length, type) over the source text. */
 public final class Token {
+
     public final int start;
     public final int length;
     public final TokenType type;

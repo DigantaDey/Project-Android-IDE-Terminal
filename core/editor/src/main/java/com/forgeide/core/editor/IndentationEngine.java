@@ -1,7 +1,6 @@
 package com.forgeide.core.editor;
 
 import com.forgeide.core.util.TextUtils;
-
 import java.util.regex.Pattern;
 
 /**
@@ -32,8 +31,12 @@ public final class IndentationEngine {
     public String indentForNewLine(IndentRules rules, String prevLine) {
         int base = TextUtils.leadingWhitespaceColumns(prevLine, tabSize);
         String trimmed = prevLine.trim();
-        if (rules != null && rules.increaseIndent != null && !trimmed.isEmpty()
-                && matches(rules.increaseIndent, trimmed)) {
+        if (
+            rules != null &&
+            rules.increaseIndent != null &&
+            !trimmed.isEmpty() &&
+            matches(rules.increaseIndent, trimmed)
+        ) {
             base += tabSize;
         }
         if (rules != null && rules.dedentNext != null && matches(rules.dedentNext, trimmed)) {
