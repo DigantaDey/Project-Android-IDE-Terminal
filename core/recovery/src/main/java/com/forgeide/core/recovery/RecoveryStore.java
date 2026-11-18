@@ -26,7 +26,7 @@ public final class RecoveryStore {
         try (DirectoryStream<Path> files = Files.newDirectoryStream(directory, "*.json")) {
             for (Path p : files) {
                 if (Files.size(p) > 64L * 1024 * 1024) throw new IOException("Recovery journal exceeds safety limit: " + p.getFileName());
-                try { JsonObject j = JsonObject.parse(Files.readString(p)); Entry e = new Entry(j);
+                try { JsonObject j = JsonObject.parse(com.forgeide.core.util.AtomicFiles.readUtf8(p)); Entry e = new Entry(j);
                     if (!AtomicFiles.sha256(e.text.getBytes(StandardCharsets.UTF_8)).equals(j.getString("checksum", ""))) throw new IOException("Recovery checksum mismatch: " + p.getFileName());
                     result.add(e);
                 } catch (RuntimeException ex) { throw new IOException("Damaged recovery journal retained: " + p.getFileName(), ex); }

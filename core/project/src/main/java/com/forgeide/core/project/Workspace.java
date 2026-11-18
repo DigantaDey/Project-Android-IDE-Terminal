@@ -66,7 +66,7 @@ public final class Workspace {
     public List<String> files(int limit) throws IOException {
         List<String> out = new ArrayList<>();
         Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 64, new SimpleFileVisitor<Path>() {
-            @Override public FileVisitResult preVisitDirectory(Path d, BasicFileAttributes a) { String n = d.getFileName().toString(); return !d.equals(root) && Set.of(".git", ".forge-trash", "node_modules", "build", ".gradle", ".venv").contains(n) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE; }
+            @Override public FileVisitResult preVisitDirectory(Path d, BasicFileAttributes a) { String n = d.getFileName().toString(); return !d.equals(root) && Set.of(".git", ".forge-trash", "replace-backups", "node_modules", "build", ".gradle", ".venv").contains(n) ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE; }
             @Override public FileVisitResult visitFile(Path f, BasicFileAttributes a) { if (out.size() >= limit) return FileVisitResult.TERMINATE; if (a.isRegularFile() && !a.isSymbolicLink()) out.add(relative(f)); return FileVisitResult.CONTINUE; }
         }); return out;
     }

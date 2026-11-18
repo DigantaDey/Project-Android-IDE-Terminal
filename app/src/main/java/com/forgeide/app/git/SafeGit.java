@@ -39,7 +39,7 @@ public final class SafeGit implements GitService {
         // Imported repository metadata is untrusted. Deny links, alternates and external configuration.
         try(java.util.stream.Stream<Path> paths=Files.walk(meta)){for(Iterator<Path> it=paths.iterator();it.hasNext();){Path p=it.next();if(Files.isSymbolicLink(p))throw new IOException("Git metadata symlinks are not permitted");}}
         if(Files.exists(meta.resolve("commondir"))||Files.exists(meta.resolve("objects/info/alternates")))throw new IOException("External Git object/worktree stores are not permitted");
-        String config=Files.readString(workspace.resolve(".git/config"));if(config.matches("(?is).*(\\[\\s*(include|includeIf|filter|url|gpg)\\b|sshCommand|hooksPath).*"))throw new IOException("Repository config contains unsupported external integrations");
+        String config=com.forgeide.core.util.AtomicFiles.readUtf8(workspace.resolve(".git/config"));if(config.matches("(?is).*(\\[\\s*(include|includeIf|filter|url|gpg)\\b|sshCommand|hooksPath).*"))throw new IOException("Repository config contains unsupported external integrations");
         Repository r=new FileRepositoryBuilder().setGitDir(meta.toFile()).setWorkTree(workspace.root().toFile()).setFS(new NoExecFS()).build();
         r.getConfig().setBoolean("commit",null,"gpgsign",false);r.getConfig().setBoolean("core",null,"symlinks",false);git=new Git(r);return git;
     }

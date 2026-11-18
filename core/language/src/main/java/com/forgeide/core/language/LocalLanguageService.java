@@ -54,7 +54,7 @@ public final class LocalLanguageService implements LanguageService {
     }
     /** Lossless JSON formatting or trailing-whitespace cleanup; never pretend this is Prettier/Black. */
     public String format(Language lang, String text, int indent) {
-        if (lang.id().equals("json")) return Json.writePretty(Json.parse(text), indent) + "\n";
+        if (lang.id().equals("json")) return JsonFormatter.format(text, indent);
         return text.replaceAll("(?m)[ \\t]+$", "");
     }
 }
