@@ -7,6 +7,7 @@ Never enable visualReport/FORGE_VISUAL_REPORT on an installation with private da
 """
 from pathlib import Path
 import base64
+import hashlib
 import re
 import sys
 
@@ -27,10 +28,13 @@ else:
     image = base64.b64decode("".join(parts[index] for index in range(expected)), validate=True)
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "workspace-preview.jpg").write_bytes(image)
-if len(image) > 100000 or not image.startswith(b"\xff\xd8"):
-    raise SystemExit("QA thumbnail exceeds diagnostic transport limit or is not JPEG")
+if len(image) > 100000 or not image.startswith(b"\xff\xd8") or not image.endswith(b"\xff\xd9"):
+    raise SystemExit("QA thumbnail exceeds diagnostic transport limit or is not a complete JPEG")
 encoded = base64.b64encode(image).decode("ascii")
-size = 6000
+# The check-annotations API truncates messages at 4 KiB even when logs retain more.
+size = 3000
+count = (len(encoded) + size - 1) // size
+print(f"::notice file=docs/TESTING.md,line=1,title=Native image manifest::bytes={len(image)};chunks={count};sha256={hashlib.sha256(image).hexdigest()}")
 for offset in range(0, len(encoded), size):
     index = offset // size
     print(f"::notice file=docs/TESTING.md,line=1,title=Native screenshot {index:03d}::{encoded[offset:offset + size]}")
