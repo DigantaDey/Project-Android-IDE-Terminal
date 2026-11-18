@@ -2,6 +2,7 @@ package com.forgeide.core.runtime;
 
 import com.forgeide.core.sandbox.SandboxPolicy;
 import com.forgeide.core.util.CancellationToken;
+import com.forgeide.core.util.OutputLimiter;
 import org.mozilla.javascript.*;
 import java.util.*;
 import java.util.function.Consumer;
@@ -23,15 +24,14 @@ public final class JavaScriptRuntime {
             @Override protected Context makeContext(){Context cx=super.makeContext();cx.setOptimizationLevel(-1);cx.setLanguageVersion(Context.VERSION_ES6);cx.setInstructionObserverThreshold(1000);cx.setMaximumInterpreterStackDepth(256);cx.setClassShutter(className->false);cx.getWrapFactory().setJavaPrimitiveWrap(false);return cx;}
             @Override protected void observeInstructionCount(Context cx,int count){if(cancel.isCancelled()||Thread.currentThread().isInterrupted())throw new Stopped("Execution cancelled");if(System.nanoTime()>deadline)throw new Stopped("Execution time limit exceeded");}
         };
-        final int[] emitted={0};
+        OutputLimiter limiter=new OutputLimiter(policy.outputBytes,output);
         try {
             factory.call(cx->{
                 if(debugger!=null){debugger.attach(cancel,deadline);cx.setGeneratingDebug(true);cx.setDebugger(debugger,null);}
                 ScriptableObject scope=cx.initSafeStandardObjects(null,true);
                 BaseFunction print=new BaseFunction(){@Override public Object call(Context c,Scriptable s,Scriptable self,Object[] a){
                     StringBuilder line=new StringBuilder();for(Object value:a){if(line.length()>0)line.append(' ');line.append(Context.toString(value));if(line.length()>policy.outputBytes)break;}line.append('\n');
-                    int remaining=policy.outputBytes-emitted[0];if(remaining<=0)throw new Stopped("Output limit exceeded");
-                    String value=line.substring(0,Math.min(line.length(),remaining));emitted[0]+=value.length();output.accept(value);if(line.length()>remaining)throw new Stopped("Output limit exceeded");return Undefined.instance;
+                    limiter.accept(line.toString());return Undefined.instance;
                 }};
                 ScriptableObject.putProperty(scope,"print",print);
                 Scriptable console=cx.newObject(scope);for(String method:List.of("log","info","warn","error","debug"))ScriptableObject.putProperty(console,method,print);ScriptableObject.putProperty(scope,"console",console);
@@ -43,6 +43,7 @@ public final class JavaScriptRuntime {
             });
             return new Result(0,"",0,0);
         } catch(Stopped e){return new Result(cancel.isCancelled()?130:124,e.getMessage(),0,0);}
+        catch(OutputLimiter.LimitExceeded e){return new Result(124,e.getMessage(),0,0);}
         catch(RhinoException e){return new Result(1,e.details(),e.lineNumber(),e.columnNumber());}
         catch(StackOverflowError e){return new Result(1,"Interpreter stack limit exceeded",0,0);}
         finally {if(debugger!=null)debugger.finished();}

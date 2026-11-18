@@ -11,11 +11,11 @@ public final class SandboxPolicy {
     public SandboxPolicy(long timeoutMillis, int outputBytes, Set<Restriction> required) {
         if (timeoutMillis < 100 || timeoutMillis > 60000 || outputBytes < 1024 || outputBytes > 1024 * 1024) throw new IllegalArgumentException("Unsafe sandbox limits");
         this.timeoutMillis = timeoutMillis; this.outputBytes = outputBytes;
-        this.required = Collections.unmodifiableSet(EnumSet.copyOf(required));
+        this.required = Collections.unmodifiableSet(required.isEmpty() ? EnumSet.noneOf(Restriction.class) : EnumSet.copyOf(required));
     }
     public static SandboxPolicy safeDefault() { return new SandboxPolicy(10000, 262144, EnumSet.of(Restriction.ISOLATED_UID, Restriction.NO_HOST_FILES, Restriction.NO_NETWORK, Restriction.NO_PROCESS_CREATION, Restriction.DEADLINE, Restriction.OUTPUT_LIMIT)); }
     public void requireSupported(Set<Restriction> supported) {
-        Set<Restriction> missing = EnumSet.copyOf(required); missing.removeAll(supported);
+        Set<Restriction> missing = required.isEmpty() ? EnumSet.noneOf(Restriction.class) : EnumSet.copyOf(required); missing.removeAll(supported);
         if (!missing.isEmpty()) throw new SecurityException("Runtime cannot enforce: " + missing);
     }
 }

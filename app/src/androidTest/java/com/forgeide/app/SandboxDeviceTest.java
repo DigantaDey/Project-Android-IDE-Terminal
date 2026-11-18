@@ -50,6 +50,13 @@ public final class SandboxDeviceTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(()->second.set(client.run("print('second run');",config(),SandboxPolicy.safeDefault(),List.of(),false,output::append,output::append,s->{})));
         assertEquals(output.toString(),Integer.valueOf(0),second.get().get(15,TimeUnit.SECONDS));assertTrue(output.toString().contains("second run"));
     }
+    @Test public void realSqliteRunsInMemoryWithoutAHostFilesystem() throws Exception {
+        ExecutionClient client=new ExecutionClient(InstrumentationRegistry.getInstrumentation().getTargetContext());
+        AtomicReference<CompletableFuture<Integer>> result=new AtomicReference<>();StringBuffer output=new StringBuffer();
+        RunConfiguration sql=new RunConfiguration("SQL test","sql","test.sql","",List.of(),Map.of(),"",List.of(),List.of(),List.of());
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(()->result.set(client.run("CREATE TABLE test(n INTEGER); INSERT INTO test VALUES(42); SELECT n FROM test;",sql,SandboxPolicy.safeDefault(),List.of(),false,output::append,output::append,s->{})));
+        assertEquals(output.toString(),Integer.valueOf(0),result.get().get(15,TimeUnit.SECONDS));assertTrue(output.toString(),output.toString().contains("42"));
+    }
     @Test public void strictUnsupportedLimitsRejectBeforeBinding() {
         Set<SandboxPolicy.Restriction> required=EnumSet.copyOf(SandboxPolicy.safeDefault().required);required.add(SandboxPolicy.Restriction.HARD_MEMORY_LIMIT);
         try{new ExecutionClient(InstrumentationRegistry.getInstrumentation().getTargetContext()).run("print(1)",config(),new SandboxPolicy(1000,1024,required),List.of(),false,s->{},s->{},s->{});fail("Must fail closed");}catch(SecurityException expected){}

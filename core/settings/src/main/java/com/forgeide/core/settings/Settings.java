@@ -10,7 +10,7 @@ import java.util.*;
 public final class Settings {
     private final Map<String, Object> global = new LinkedHashMap<>(), project = new LinkedHashMap<>();
     public Settings() {
-        global.put("theme", "system"); global.put("fontSize", 14L); global.put("tabSize", 4L);
+        global.put("theme", "system"); global.put("fontFamily", "monospace"); global.put("syntaxTheme", "warm"); global.put("fontSize", 14L); global.put("tabSize", 4L);
         global.put("useTabs", false); global.put("wordWrap", false); global.put("minimap", false);
         global.put("requireHardLimits", false);
         global.put("autoClose", true); global.put("autosave", true); global.put("autosaveSeconds", 15L);
@@ -25,12 +25,16 @@ public final class Settings {
         Object def = global.get(key);
         if (def instanceof Number) {
             if (!(value instanceof Number)) throw new IllegalArgumentException("Expected number");
+            double numeric = ((Number) value).doubleValue();
+            if (!Double.isFinite(numeric) || numeric != Math.rint(numeric)) throw new IllegalArgumentException("Expected a finite whole number");
             int n = ((Number) value).intValue(), min = 1, max = 600;
             switch (key) { case "fontSize": min = 9; max = 32; break; case "tabSize": max = 8; break; case "uiScale": min = 80; max = 150; break; case "executionSeconds": max = 60; break; case "outputKiB": min = 16; max = 1024; break; }
             if (n < min || n > max) throw new IllegalArgumentException(key + " must be " + min + "–" + max);
             value = (long)n;
         } else if (def instanceof Boolean && !(value instanceof Boolean)) throw new IllegalArgumentException("Expected boolean");
         else if (key.equals("theme") && !List.of("system", "dark", "light").contains(value)) throw new IllegalArgumentException("Unknown theme");
+        if (key.equals("fontFamily") && !List.of("monospace", "sans-serif", "serif").contains(value)) throw new IllegalArgumentException("Unknown font family");
+        if (key.equals("syntaxTheme") && !List.of("warm", "cool", "monochrome").contains(value)) throw new IllegalArgumentException("Unknown syntax theme");
         (perProject ? project : global).put(key, value);
     }
     public synchronized void load(Path file, boolean perProject) throws IOException {
