@@ -45,8 +45,9 @@ public final class NativeRuntimeClient {
             ) return "Runtime signature does not match this IDE build; install both APKs from the same offline bundle";
             if (
                 info.metaData == null ||
-                !BuildConfig.NATIVE_BUNDLE_ID.equals(info.metaData.getString("forge.native.bundle"))
-            ) return "Runtime package version does not match this IDE; install the companion from the same bundle";
+                !BuildConfig.NATIVE_BUNDLE_ID.equals(info.metaData.getString("forge.native.bundle")) ||
+                info.metaData.getInt("forge.native.protocol", -1) != NativeTools.PROTOCOL
+            ) return "Runtime payload/security protocol does not match this IDE; install both APKs from the same bundle";
             return "";
         } catch (PackageManager.NameNotFoundException missing) {
             return "Install the included forge-native-runtime APK first";

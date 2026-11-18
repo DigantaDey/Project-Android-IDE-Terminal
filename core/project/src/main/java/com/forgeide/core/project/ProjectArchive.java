@@ -43,6 +43,11 @@ public final class ProjectArchive {
                     }
                 }
             }
+            if (entries == 0) {
+                // Android 8 cannot finish a truly entryless ZIP.
+                zip.putNextEntry(new ZipEntry("./"));
+                zip.closeEntry();
+            }
         }
     }
 
@@ -61,8 +66,12 @@ public final class ProjectArchive {
                 );
                 Path p = w.resolve(e.getName());
                 if (!seen.add(p.toString())) throw new IOException("Duplicate archive entry");
-                if (e.isDirectory()) Files.createDirectories(p);
-                else {
+                if (e.isDirectory()) {
+                    // closeEntry() otherwise inflates ignored directory data without
+                    // counting it against MAX_BYTES. Real directory entries are empty.
+                    if (zip.read() != -1) throw new IOException("Archive directory contains file data");
+                    Files.createDirectories(p);
+                } else {
                     Files.createDirectories(p.getParent());
                     try (OutputStream out = Files.newOutputStream(p, StandardOpenOption.CREATE_NEW)) {
                         int n;

@@ -39,6 +39,10 @@ public final class RuntimeSnapshot {
 
     public static void write(Workspace workspace, OutputStream output) throws IOException {
         try (ZipOutputStream zip = new ZipOutputStream(output)) {
+            // Android 8's ZIP writer rejects archives with no entries. An explicit
+            // directory marker represents the root without inventing project files.
+            zip.putNextEntry(new ZipEntry("./"));
+            zip.closeEntry();
             Deque<String> pending = new ArrayDeque<>();
             pending.add("");
             long bytes = 0;
@@ -49,6 +53,8 @@ public final class RuntimeSnapshot {
                 if (!allowed(name)) continue;
                 if (++files > MAX_FILES) throw new IOException("Native project copy exceeds 2,000 entries");
                 if (workspace.isDirectory(name)) {
+                    zip.putNextEntry(new ZipEntry(name + "/"));
+                    zip.closeEntry();
                     pending.addLast(name);
                     continue;
                 }
@@ -100,6 +106,12 @@ public final class RuntimeSnapshot {
                 while (entries.hasMoreElements()) {
                     ZipEntry entry = entries.nextElement();
                     String name = entry.getName();
+                    if (name.equals("./") && entry.isDirectory()) {
+                        if (entry.getSize() != 0 || !seen.add("./")) throw new IOException(
+                            "Invalid or duplicate runtime project root marker"
+                        );
+                        continue;
+                    }
                     if (entry.isDirectory()) name = name.substring(0, name.length() - 1);
                     if (!allowed(name) || ++count > MAX_FILES || !seen.add(name)) throw new IOException(
                         "Invalid or excessive native snapshot entry"

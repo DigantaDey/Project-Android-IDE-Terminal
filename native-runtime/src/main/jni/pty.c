@@ -143,7 +143,13 @@ JNIEXPORT void JNICALL Java_com_forgeide_runtime_NativePty_killAll(JNIEnv *env, 
             if (!stat(path, &info) && info.st_uid == getuid()) { kill((pid_t)pid, SIGKILL); found = 1; }
         }
         closedir(processes);
+        // We are a child subreaper. Reap adopted grandchildren as well as direct
+        // children so terminated jobs cannot retain UID task slots as zombies.
+        // A simultaneous waitFor(mainPid) may return ECHILD after cancellation;
+        // stopSession already owns the final cancellation status in that case.
+        while (waitpid(-1, NULL, WNOHANG) > 0) {}
         if (!found) break;
+        usleep(5000); // Give killed/reparented descendants a bounded scheduling turn.
     }
 }
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {

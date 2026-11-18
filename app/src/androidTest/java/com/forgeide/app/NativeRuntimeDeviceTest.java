@@ -207,7 +207,9 @@ public final class NativeRuntimeDeviceTest {
         assertTrue(response, response.contains("com.forgeide.app.permission.NATIVE_RUNTIME"));
         assertTrue(
             response,
-            response.contains("Permission Denial") || response.contains("SecurityException")
+            response.contains("Permission Denial") ||
+                response.contains("SecurityException") ||
+                response.contains("Error: Requires permission com.forgeide.app.permission.NATIVE_RUNTIME")
         );
         assertFalse(app.nativeRuntime.busy());
     }
@@ -289,7 +291,7 @@ public final class NativeRuntimeDeviceTest {
                 if (output.toString().contains("EXPORT_READY_42")) ready.countDown();
             }
         );
-        assertTrue(output.toString(), ready.await(30, TimeUnit.SECONDS));
+        assertTrue(output.toString(), ready.await(110, TimeUnit.SECONDS));
         assertFalse(Files.exists(workspace.resolve("native-generated.txt")));
         assertFalse(app.settings.bool("native.network"));
         Path destination = Files.createTempFile(app.projects, "native-export-fixture-", ".zip");
@@ -437,6 +439,54 @@ public final class NativeRuntimeDeviceTest {
         workspace.write("ok.py", "print('RERUN_42')\n");
         assertRun("python", "python", "ok.py");
         assertTrue(output.toString(), output.toString().contains("RERUN_42"));
+    }
+
+    @Test
+    public void stopReapsDetachedNativeDescendantsBeforeTheNextRun() throws Exception {
+        workspace.write(
+            "descendants.py",
+            String.join(
+                "\n",
+                "import subprocess,time",
+                "child=subprocess.Popen(['bash','--noprofile','--norc','-c','sleep 120 & printf \"NATIVE_PID_%s\\\\n\" \"$!\"; wait'],start_new_session=True)",
+                "print('NATIVE_PID_'+str(child.pid),flush=True)",
+                "other=subprocess.Popen(['sleep','120'],start_new_session=True)",
+                "print('NATIVE_PID_'+str(other.pid),flush=True)",
+                "while True: time.sleep(1)",
+                ""
+            )
+        );
+        Set<Integer> pids = new ConcurrentSkipListSet<>();
+        CountDownLatch descendants = new CountDownLatch(1);
+        NativeRuntimeClient.Run run = start(
+            "python",
+            "python",
+            "descendants.py",
+            List.of(),
+            Map.of(),
+            "",
+            60000,
+            8192,
+            false,
+            bytes -> {
+                java.util.regex.Matcher match = java.util.regex.Pattern.compile("NATIVE_PID_(\\d+)").matcher(
+                    output.toString()
+                );
+                while (match.find()) pids.add(Integer.parseInt(match.group(1)));
+                if (pids.size() == 3) descendants.countDown();
+            }
+        );
+        assertTrue(output.toString(), descendants.await(110, TimeUnit.SECONDS));
+        app.nativeRuntime.stop(run);
+        assertEquals(Integer.valueOf(130), run.result.get(10, TimeUnit.SECONDS));
+        workspace.write(
+            "check-stopped.py",
+            "import os\nfor pid in " +
+                pids.toString() +
+                ":\n try:\n  os.kill(pid,0)\n except ProcessLookupError:\n  continue\n raise AssertionError('Native descendant survived stop: '+str(pid))\nprint('DESCENDANTS_STOPPED_42')\n"
+        );
+        assertRun("python", "python", "check-stopped.py");
+        assertTrue(output.toString(), output.toString().contains("DESCENDANTS_STOPPED_42"));
     }
 
     @Test

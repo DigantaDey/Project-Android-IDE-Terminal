@@ -9,7 +9,8 @@ public final class NativeTools {
 
     public static final String PACKAGE = "com.forgex";
     public static final String SERVICE = "com.forgeide.runtime.NativeRuntimeService";
-    public static final int PROTOCOL = 1;
+    // Revision 2 requires UNIX-proxy/Binder/io_uring guards, not just payload equality.
+    public static final int PROTOCOL = 2;
     public static final Set<String> IDS = Set.of("clang", "python", "node", "npm", "bash");
     public static final List<String> ORDER = List.of("clang", "python", "node", "npm", "bash");
 
