@@ -39,9 +39,21 @@ Instrumentation exercises:
 - Real static HTML rendering with scripts disabled and confined resource/URL handling when an Android WebView provider exists. The API 26 AOSP image without a provider instead verifies the native unavailable state; the editor and runtimes must remain usable.
 - A screenshot of the actual native workspace, written to the test app's external files directory, with a test-only automation capture in `/data/local/tmp` so runner uninstall cannot remove the CI copy. It is not a design mock; the production app exposes no shell automation API.
 
-Native companion tests additionally compile and execute C and C++, use actual CPython with Unicode argv/stdin and private-file/socket denials, call Node CommonJS/filesystem APIs, install an offline local npm dependency without lifecycle scripts, check native launch switches, native deadlines/cancel/rerun and late-cancel ownership, and exercise actual PTY input/resize/Ctrl-C plus terminal Activity recreation. The companion is required; missing APKs are failures, not skips.
+Native companion tests additionally compile and execute C and C++, use actual CPython with Unicode argv/stdin and private-file/socket denials, call Node CommonJS/filesystem APIs, install an offline local npm dependency without lifecycle scripts, check native launch switches, native deadlines/cancel/rerun and late-cancel ownership, and exercise actual PTY input/resize/pipelines/foreground-child Ctrl-C plus terminal Activity recreation. Additional native cases require signature-permission rejection of an untrusted shell caller, real UNIX-proxy/Binder syscall denial with network off/on, loopback network opt-in, metadata-filtered copies and explicit ZIP export of native-generated files without original-project mutation. The companion is required; missing APKs are failures, not skips.
 
 No real GitHub token or external network dependency is used by device tests. Network authentication/remote server compatibility must be tested separately with a dedicated least-privilege test account; do not put credentials in CI logs or this repository.
+
+## Native host regressions
+
+`python3 -m unittest discover -s scripts -p 'test_*.py' -v` also compiles the exact
+native seccomp policy on supported Linux hosts with `cc`. Fresh child processes
+verify network-off INET/IPv6/UNIX-proxy and address-send denials, allowed local
+socketpair/pipe/subprocess I/O, the network-on switch, Binder ioctl/ptrace/process_vm/
+io_uring denials, and the x86 x32 guard. A JDK compiles and runs the actual JNI PTY
+launcher against host Bash ten times, checking cold-start output, terminal size,
+pipelines, foreground-job Ctrl-C, and a subsequent shell command. It never invokes
+the Android companion's UID-wide kill sweep. These Linux host cases supplement,
+not replace, required Android native execution/instrumentation.
 
 ## Core regressions
 

@@ -70,7 +70,13 @@ Autosave is configurable (15 seconds by default). Independently, edits schedule 
 
 Recovery is automatic when a project is reopened. A damaged journal is reported and retained, while healthy journals continue to recover. The newest journals are restored within the 20-tab limit; overflow remains on disk with a warning. Save/close restored tabs and reopen the project to recover remaining entries. **Storage & recovery** lists journal/storage status. Export important work regularly: a device reset, uninstall, storage failure, or Android kill before a journal flush can still lose work. Recovery is not a cloud backup.
 
-## Running JavaScript
+## Running JavaScript (isolated Rhino)
+
+The default JavaScript provider is Rhino. If you install the optional companion
+and enable Node.js, ordinary **Run current file** selects Node instead. The
+`javascript` run-configuration provider and the existing debugger still select
+Rhino explicitly; the `node` provider selects real Node.js. These are different
+runtimes, not interchangeable standard libraries.
 
 Available globals: `print`, `console.log/info/warn/error/debug`, `arguments`, `env`, and `readLine()`. Standard safe Rhino ES6 objects are available. Node.js/browser/Android/Java APIs are not.
 
@@ -81,7 +87,7 @@ print('Setting:', env.MODE);
 print('Input:', readLine());
 ```
 
-**Run project configuration** uses the `file` and `toolchain` fields and refuses unavailable or language-mismatched providers instead of silently substituting one. **Run current file** runs the selected file and uses `.forge/run.json` for launch options. The built-in provider is chosen for the current file's language. Example:
+**Run project configuration** uses the `file` and `toolchain` fields and refuses unavailable or language-mismatched providers instead of silently substituting one. **Run current file** runs the selected file and uses `.forge/run.json` for launch options. The first enabled compatible provider is chosen for the current file's language (native Node takes priority when enabled). Example:
 
 ```json
 {
@@ -134,7 +140,45 @@ help pwd cd ls cat echo touch mkdir cp mv rm find head tail grep wc env export u
 
 `run` launches through the isolated provider. Read-only Git commands use the IDE's trusted Git service. State-changing/network Git operations use the Git UI so consent remains visible. Unsupported commands return an error, never host-shell execution.
 
-This is **not a PTY**. Pipes, redirects, native shells, interactive OS jobs, ANSI emulation, arbitrary executables, and package managers are unavailable. `rm` moves files to recoverable project trash. Shell mutations refuse paths backing an open editor buffer; close affected tabs first or use the explorer to rename an open document safely. Cwd/history/output persist; native processes cannot be restored. Terminal environment values are session-local and are not written into the persisted history state. Treat transcripts as project data, not a password manager.
+The scoped project shell is **not a PTY**: pipes, redirects, native jobs and package managers are unavailable in that panel. Use the separate opt-in native Bash window below for those capabilities. `rm` moves files to recoverable project trash. Shell mutations refuse paths backing an open editor buffer; close affected tabs first or use the explorer to rename an open document safely. Cwd/history/output persist; native processes cannot be restored. Terminal environment values are session-local and are not written into the persisted history state. Treat transcripts as project data, not a password manager.
+
+## Native compilers, Python, Node/npm and Bash
+
+Install **both** APKs from one successful offline bundle, then open **Settings →
+Toolchains & native runtime switches**. Clang, CPython, Node.js, npm and Bash each
+have a global on/off control; all default off. npm also needs Node. Disabling a
+tool stops the active native session and blocks its Forge launcher/normal command
+discovery; it does not uninstall bundled files or prohibit absolute paths and
+interpreters implemented by enabled native code.
+
+Run a `.c`/`.cpp`, `.py`, `.js`, or `.sh` file with the corresponding tool enabled.
+Clang compiles and executes real C/C++; Python and Node expose their real standard
+libraries. These tools receive a bounded disposable project copy in a **separate
+Android app UID**, never the IDE's live project, vault or storage grants. Ordinary
+project files may themselves contain secrets: review them before running code.
+There is no automatic write-back. File-run copies disappear at exit.
+
+Choose **Open native Bash PTY** from the palette, terminal toolbar or tool settings
+for an ANSI terminal with pipelines, redirects, interactive input and native job
+control. Use its **^C** button to interrupt a foreground command. The terminal
+retains its state across rotation while the IDE process lives. **Back to editor**
+leaves it running; reopen the native terminal to return. **Stop & discard** kills
+its jobs and removes the project copy. Before stopping, use **terminal menu →
+Export project copy as ZIP…** if you want to preserve native-generated files.
+Interrupt mutating commands before exporting, and check export succeeded.
+
+The native **network** and **npm install scripts** controls are separate and
+default off. `npm install` is an explicit package-install action; offline local
+packages need no connection, but registry downloads require network consent.
+Package scripts are arbitrary code and should remain off for untrusted packages.
+Bash/native code is programmable, so the per-tool/script flags are consent and
+launch policy, not separate language-level security containers.
+
+The runtime companion deliberately uses legacy target-28 execution compatibility;
+the IDE stays target 35. This is a sideloaded developer bundle, not a Play-ready
+app. Only primary-user arm64-v8a/x86_64 installations are supported. Java SDK,
+pip, TypeScript, extra build systems and semantic LSP/DAP servers are not bundled.
+See [installation, storage sizes and the native threat model](NATIVE_RUNTIME.md).
 
 ## Git / GitHub
 
@@ -146,7 +190,7 @@ Only HTTPS remotes are accepted. Redirects, credential-bearing URLs, SSH/native 
 
 ## Troubleshooting
 
-- **Tool not installed:** check Toolchains & dependencies. Desktop binaries are not assumed compatible with Android; nothing is auto-installed.
+- **Native tool off/missing:** install both APKs from the same offline bundle and enable it in Settings → Toolchains & native runtime switches. Allow internal space for the first verified unpack. Desktop binaries are not assumed Android-compatible; nothing is silently installed/downloaded.
 - **Strict policy blocked execution:** Android's built-in provider cannot enforce hard memory/CPU-share quotas. Leave strict mode on for untrusted workloads that require those guarantees.
 - **File changed on disk:** keep the tab/recovery copy, inspect the disk version, then save a separate copy or explicitly reload. Do not retry by deleting the recovery journal.
 - **Sandbox stopped:** inspect Output/Logs for deadline, output, Android memory pressure, or service errors. Reduce workload, then rerun.

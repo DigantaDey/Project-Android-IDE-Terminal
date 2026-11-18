@@ -51,7 +51,7 @@ For the latest branch build, open [GitHub Actions](https://github.com/DigantaDey
 2. Tap **Run** or press **F5**. Its Fibonacci example executes locally in a separate isolated Android UID.
 3. Open the command palette, choose **Debug current JavaScript file**, and use the Debugger panel to step or evaluate an expression.
 4. Use the project title to create/switch projects or import a folder/ZIP. Imports are private copies, not live external-directory mounts.
-5. Use **Settings → Toolchains & dependencies** before relying on a compiler/package manager. Uninstalled providers cannot execute.
+5. Install the matching runtime APK, then use **Settings → Toolchains & native runtime switches** to enable Clang, CPython, Node/npm or native Bash. Disabled or missing providers cannot execute.
 
 More: [user guide](docs/USER_GUIDE.md) · [architecture and extension contracts](docs/ARCHITECTURE.md) · [security and storage model](docs/SECURITY.md) · [testing](docs/TESTING.md) · [third-party notices](THIRD_PARTY_NOTICES.md).
 

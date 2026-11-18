@@ -1,6 +1,6 @@
 # Capability matrix
 
-This document describes the code that is shipped, not a roadmap disguised as installed functionality. The optional offline native companion is installed separately and all its tool switches default off; see [setup, compatibility and security](NATIVE_RUNTIME.md). The app's **Toolchains & dependencies** screen uses the same conservative boundary.
+This document describes the code that is shipped, not a roadmap disguised as installed functionality. The optional offline native companion is installed separately and all its tool switches default off; see [setup, compatibility and security](NATIVE_RUNTIME.md). The app's **Toolchains & native runtimes** screen uses the same conservative boundary.
 
 ## Language support
 
@@ -11,7 +11,7 @@ All languages below have offline tokenization/syntax colors, word/keyword comple
 | C / C++ | Brace indentation/pairs, comment commands, heuristic declarations/folds | Clang/Clang++ + LLD and C/C++ headers/runtime in the opt-in native companion; no GDB/LLDB debugger |
 | Java | Brace indentation/pairs, comment commands, heuristic declarations/folds | No Java compiler/runtime provider installed; the app's own Android runtime is not a user-code toolchain |
 | JavaScript | Brace indentation/pairs, parser diagnostics/syntax check, heuristic symbols | Isolated Rhino ES6 with real debugging; opt-in native Node.js/CommonJS/filesystem in the separate companion (no Node debugger) |
-| TypeScript | JS-family tokenization and TS keywords, lexical declarations | No TS compiler, Node.js, module resolver, or TS language server installed |
+| TypeScript | JS-family tokenization and TS keywords, lexical declarations | No TS compiler, TypeScript module resolver, or TS language server installed; optional Node does not compile TypeScript |
 | Python | Python tokenization, colon indentation, comments, heuristic declarations/folds | CPython standard library in the opt-in native companion; no pip, debugpy or semantic provider installed |
 | HTML | Markup and embedded CSS/JS colors | Static offline preview when Android WebView is available; otherwise an explicit native unavailable state; scripts stay disabled |
 | CSS | CSS tokens, brace indentation | Rendered by the static HTML preview; no Sass/PostCSS toolchain |

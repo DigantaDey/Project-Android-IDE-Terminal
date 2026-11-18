@@ -36,8 +36,10 @@ jobs:
         run: |
           npm ci --prefix tools/format --ignore-scripts --no-audit --no-fund
           npm --prefix tools/format run check
-      - name: Test CI report helpers
-        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Test CI report helpers and real native host launcher
+        run: |
+          set -o pipefail
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee host-tests-ci.log
       - uses: actions/cache/restore@v4
         id: native-payload-cache
         with:
@@ -75,7 +77,7 @@ jobs:
         run: ./gradlew :app:dependencies --configuration debugRuntimeClasspath > app/build/reports/runtime-dependencies.txt
       - name: Annotate build failure
         if: failure()
-        run: python3 scripts/ci-diagnostics.py gradle-ci.log
+        run: python3 scripts/ci-diagnostics.py host-tests-ci.log gradle-ci.log
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
