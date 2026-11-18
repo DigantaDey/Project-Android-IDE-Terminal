@@ -1,4 +1,5 @@
 plugins { id("com.android.application") }
+val nativeBundleId = java.security.MessageDigest.getInstance("SHA-256").digest(rootProject.file("tools/native/runtime-lock.json").readBytes()).joinToString("") { "%02x".format(it) }
 android {
     namespace = "com.forgeide.app"
     compileSdk = 35
@@ -6,8 +7,9 @@ android {
         applicationId = "com.forgeide.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+        buildConfigField("String", "NATIVE_BUNDLE_ID", "\"$nativeBundleId\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     sourceSets.getByName("main").assets.srcDir(rootProject.file("licenses"))
@@ -23,6 +25,8 @@ android {
     testOptions { animationsDisabled = true }
 }
 dependencies {
+    implementation(project(":runtime-api"))
+    implementation(project(":terminal-ui"))
     implementation(project(":core:editor"))
     implementation(project(":core:language"))
     implementation(project(":core:project"))

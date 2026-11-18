@@ -7,6 +7,7 @@ public final class SandboxPolicy {
 
     public enum Restriction {
         ISOLATED_UID,
+        SEPARATE_APP_UID,
         NO_HOST_FILES,
         NO_NETWORK,
         NO_PROCESS_CREATION,

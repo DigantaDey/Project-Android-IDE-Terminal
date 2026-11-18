@@ -16,7 +16,8 @@ capture() {
 }
 trap capture EXIT
 if [[ "${FORGE_PREBUILT_APKS:-false}" != "true" ]]; then
-  ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+  python3 scripts/native-bundle.py build
+  ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest :native-runtime:assembleDebug --stacktrace
 fi
 # CI downloads these exact APKs from its successful build job. Device jobs never resolve Maven dependencies.
 app=app/build/outputs/apk/debug/app-debug.apk
@@ -25,6 +26,10 @@ test -s "$app"
 test -s "$tests"
 adb install -r -t "$app"
 adb install -r -t "$tests"
+native=build/offline/forge-native-runtime.apk
+if [[ ! -s "$native" ]]; then native=native-runtime/build/outputs/apk/debug/native-runtime-debug.apk; fi
+test -s "$native"
+adb install -r -t "$native"
 adb shell rm -f /data/local/tmp/forge-workspace.png
 args=()
 if [[ "${FORGE_VISUAL_REPORT:-false}" == "true" ]]; then

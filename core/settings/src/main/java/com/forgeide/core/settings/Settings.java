@@ -13,6 +13,8 @@ public final class Settings {
         project = new LinkedHashMap<>();
 
     public Settings() {
+        for (String tool : List.of("clang", "python", "node", "npm", "bash", "network", "installScripts"))
+            global.put("native." + tool, false);
         global.put("theme", "system");
         global.put("fontFamily", "monospace");
         global.put("syntaxTheme", "warm");
@@ -31,6 +33,7 @@ public final class Settings {
     }
 
     public synchronized Object get(String key) {
+        if (key.startsWith("native.")) return global.get(key);
         // An imported project is not permission to weaken the user's global sandbox policy.
         if (key.equals("requireHardLimits")) return (
             Boolean.TRUE.equals(global.get(key)) || Boolean.TRUE.equals(project.get(key))
@@ -55,6 +58,9 @@ public final class Settings {
 
     public synchronized void set(String key, Object value, boolean perProject) {
         if (!global.containsKey(key)) throw new IllegalArgumentException("Unknown setting: " + key);
+        if (perProject && key.startsWith("native.")) throw new IllegalArgumentException(
+            "Native tool consent is global and cannot be set by a project"
+        );
         Object def = global.get(key);
         if (def instanceof Number) {
             if (!(value instanceof Number)) throw new IllegalArgumentException("Expected number");
@@ -118,7 +124,7 @@ public final class Settings {
         Map<String, Object> before = new LinkedHashMap<>(target);
         try {
             for (Map.Entry<String, Object> e : values.entrySet())
-                if (global.containsKey(e.getKey())) {
+                if (global.containsKey(e.getKey()) && !(perProject && e.getKey().startsWith("native."))) {
                     try {
                         set(e.getKey(), e.getValue(), perProject);
                     } catch (IllegalArgumentException ex) {

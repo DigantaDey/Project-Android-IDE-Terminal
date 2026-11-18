@@ -28,6 +28,8 @@ public final class ForgeApplication extends Application {
     public final Settings settings = new Settings();
     public final Breakpoints breakpoints = new Breakpoints();
     public final BuildLog buildHistory = new BuildLog();
+    public com.forgeide.app.nativebridge.NativeRuntimeClient nativeRuntime;
+    public com.forgeide.app.nativebridge.NativeTerminalState nativeTerminal;
     public final ToolchainRegistry toolchains = new ToolchainRegistry();
     public volatile CompletableFuture<Integer> activeRun;
     public volatile CancellationToken runCancel;
@@ -39,6 +41,26 @@ public final class ForgeApplication extends Application {
     /** Debugging and ordinary execution must obey the same effective global/project ceilings. */
     public SandboxPolicy executionPolicy() {
         Set<SandboxPolicy.Restriction> required = EnumSet.copyOf(SandboxPolicy.safeDefault().required);
+        if (settings.bool("requireHardLimits")) {
+            required.add(SandboxPolicy.Restriction.HARD_MEMORY_LIMIT);
+            required.add(SandboxPolicy.Restriction.CPU_QUOTA);
+        }
+        return new SandboxPolicy(
+            settings.integer("executionSeconds") * 1000L,
+            settings.integer("outputKiB") * 1024,
+            required
+        );
+    }
+
+    public SandboxPolicy executionPolicy(Toolchain provider) {
+        if (!(provider instanceof com.forgeide.app.nativebridge.NativeToolchain)) return executionPolicy();
+        Set<SandboxPolicy.Restriction> required = EnumSet.of(
+            SandboxPolicy.Restriction.SEPARATE_APP_UID,
+            SandboxPolicy.Restriction.NO_HOST_FILES,
+            SandboxPolicy.Restriction.DEADLINE,
+            SandboxPolicy.Restriction.OUTPUT_LIMIT
+        );
+        if (!settings.bool("native.network")) required.add(SandboxPolicy.Restriction.NO_NETWORK);
         if (settings.bool("requireHardLimits")) {
             required.add(SandboxPolicy.Restriction.HARD_MEMORY_LIMIT);
             required.add(SandboxPolicy.Restriction.CPU_QUOTA);
@@ -73,6 +95,9 @@ public final class ForgeApplication extends Application {
         // Android also instantiates this Application in the isolated runtime: never open host state there.
         if (android.os.Process.myUid() != getApplicationInfo().uid) return;
         execution = new ExecutionClient(this);
+        nativeRuntime = new com.forgeide.app.nativebridge.NativeRuntimeClient(this);
+        for (String tool : NativeTools.ORDER)
+            toolchains.register(new com.forgeide.app.nativebridge.NativeToolchain(tool, this));
         toolchains.register(new com.forgeide.app.execution.IsolatedToolchain("javascript", execution));
         toolchains.register(new com.forgeide.app.execution.IsolatedToolchain("sql", execution));
         try {

@@ -79,4 +79,36 @@ public class SettingsTest {
         assertEquals(2, settings.integer("executionSeconds"));
         assertEquals(true, settings.snapshot().get("requireHardLimits"));
     }
+
+    @Test
+    public void nativeToolsNeedGlobalConsentAndCannotBeEnabledByImportedProject() throws Exception {
+        Settings settings = new Settings();
+        for (String key : new String[] {
+            "native.clang",
+            "native.python",
+            "native.node",
+            "native.npm",
+            "native.bash",
+            "native.network",
+            "native.installScripts",
+        }) {
+            assertFalse(key, settings.bool(key));
+            try {
+                settings.set(key, true, true);
+                fail(key);
+            } catch (IllegalArgumentException expected) {}
+        }
+        Path file = tmp.newFile().toPath();
+        Files.writeString(file, "{\"native.python\":true,\"native.network\":true,\"fontSize\":18}");
+        settings.load(file, true);
+        assertFalse(settings.bool("native.python"));
+        assertFalse(settings.bool("native.network"));
+        assertEquals(18, settings.integer("fontSize"));
+        settings.set("native.python", true, false);
+        settings.save(file, false);
+        Settings restored = new Settings();
+        restored.load(file, false);
+        assertTrue(restored.bool("native.python"));
+        assertFalse(restored.bool("native.network"));
+    }
 }

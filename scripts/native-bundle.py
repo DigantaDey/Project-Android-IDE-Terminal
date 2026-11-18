@@ -10,6 +10,11 @@ import hashlib
 import json
 import lzma
 import os
+import io
+import shutil
+import tarfile
+import zipfile
+import posixpath
 from pathlib import Path
 import re
 import subprocess
@@ -87,6 +92,10 @@ def resolve(packages, roots):
         name = aliases.get(name, name) if name not in available else name
         if name in selected:
             return
+        for existing in selected.values():
+            provided = [re.split(r"[ (:]", v.strip())[0] for v in existing.get("Provides", "").split(",")]
+            if name in provided:
+                return
         if name not in available:
             raise ValueError("Unresolved dependency: " + name)
         package = available[name]
@@ -123,13 +132,105 @@ def lock(output):
     print("::notice title=Native lock manifest,file=docs/NATIVE_RUNTIME.md::sha256=" + hashlib.sha256(output.read_bytes()).hexdigest())
 
 
+
+def build(lockfile, destination):
+    locked_bytes = lockfile.read_bytes()
+    locked = json.loads(locked_bytes)
+    if locked["schema"] != 1 or locked["mirror"] != MIRROR:
+        raise ValueError("Unsupported native package lock")
+    bundle_id = hashlib.sha256(locked_bytes).hexdigest()
+    destination.mkdir(parents=True, exist_ok=True)
+    metadata = {"schema": 1, "id": bundle_id, "architectures": {}}
+    old_prefix = "data/data/com.termux/files/usr/"
+    for arch, info in locked["architectures"].items():
+        records = {}
+        def relative(name):
+            name = name.removeprefix("./").lstrip("/")
+            if name.rstrip("/") in ("data", "data/data", "data/data/com.termux", "data/data/com.termux/files", old_prefix.rstrip("/")):
+                return None
+            if not name.startswith(old_prefix):
+                raise ValueError("Package entry outside runtime prefix: " + name)
+            rel = name[len(old_prefix):].rstrip("/")
+            if not rel or rel.startswith("/") or any(v in ("", ".", "..") for v in rel.split("/")):
+                raise ValueError("Invalid runtime package path: " + name)
+            return rel
+        def store(name, kind, value, mode):
+            existing = records.get(name)
+            item = (kind, value, mode)
+            if existing and existing[:2] != item[:2]:
+                raise ValueError("Conflicting native packages at " + name)
+            records[name] = item
+        for package in info["packages"]:
+            filename = package["Filename"]
+            if not re.fullmatch(r"pool/[A-Za-z0-9_+./:%~-]+\.deb", filename) or ".." in filename:
+                raise ValueError("Invalid pinned package URL")
+            cache = ROOT / "build/native/downloads" / (package["SHA256"] + ".deb")
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            if not cache.exists():
+                cache.write_bytes(fetch(MIRROR + filename))
+            if cache.stat().st_size != int(package["Size"]) or hashlib.sha256(cache.read_bytes()).hexdigest() != package["SHA256"]:
+                raise ValueError("Native package checksum mismatch: " + package["Package"])
+            archive = subprocess.Popen(["dpkg-deb", "--fsys-tarfile", str(cache)], stdout=subprocess.PIPE)
+            with tarfile.open(fileobj=archive.stdout, mode="r|*") as tar:
+                for member in tar:
+                    if member.isdir():
+                        continue
+                    name = relative(member.name)
+                    if not name:
+                        continue
+                    mode = 0o755 if member.mode & 0o111 else 0o644
+                    if member.isfile():
+                        data = tar.extractfile(member).read()
+                        data = data.replace(b"/data/data/com.termux", b"/data/data/com.forgex")
+                        store(name, "file", data, mode)
+                    elif member.issym():
+                        target = member.linkname.replace("/data/data/com.termux/files/usr/", "") if member.linkname.startswith("/") else posixpath.normpath(posixpath.join(posixpath.dirname(name), member.linkname))
+                        if target.startswith(("/", "../")) or target == "..":
+                            raise ValueError("Runtime link escapes bundle: " + name + " -> " + target)
+                        store(name, "link", target, mode)
+                    elif member.islnk():
+                        target = relative(member.linkname)
+                        store(name, "link", target, mode)
+                    else:
+                        raise ValueError("Unsupported package entry type")
+            if archive.wait() != 0:
+                raise ValueError("dpkg-deb failed")
+        for required in ("bin/bash", "bin/python", "bin/node", "bin/clang", "bin/clang++", "bin/ld.lld", "lib/node_modules/npm/bin/npm-cli.js"):
+            if required not in records:
+                raise ValueError("Missing bundled tool: " + required)
+        # Static bootstrap launchers are not needed; the companion never runs package postinst hooks.
+        manifest = {"schema": 1, "id": bundle_id, "files": [], "links": []}
+        payload = destination / ("runtime-" + arch + ".zip")
+        unpacked = 0
+        with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as output:
+            for name, (kind, value, mode) in sorted(records.items()):
+                if kind == "link":
+                    manifest["links"].append({"path": name, "target": value})
+                    continue
+                entry = zipfile.ZipInfo("files/" + name, (2026, 1, 1, 0, 0, 0))
+                entry.compress_type = zipfile.ZIP_DEFLATED
+                entry.external_attr = mode << 16
+                output.writestr(entry, value)
+                unpacked += len(value)
+                manifest["files"].append({"path": name, "size": len(value), "sha256": hashlib.sha256(value).hexdigest(), "mode": mode})
+            output.writestr("manifest.json", json.dumps(manifest, separators=(",", ":")))
+            output.writestr("package-lock.json", locked_bytes)
+        metadata["architectures"][arch] = {"sha256": hashlib.sha256(payload.read_bytes()).hexdigest(), "bytes": payload.stat().st_size, "unpackedBytes": unpacked, "files": len(records), "versions": {p["Package"]: p["Version"] for p in info["packages"] if p["Package"] in ("clang", "python", "nodejs", "nodejs-lts", "npm", "bash")}}
+        print("::notice title=Offline native payload::" + arch + " " + json.dumps(metadata["architectures"][arch]), flush=True)
+    (destination / "runtime-catalog.json").write_text(json.dumps(metadata, indent=2) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["lock"])
+    parser.add_argument("command", choices=["lock", "build"])
     parser.add_argument("--output", type=Path, default=ROOT / "build/native/runtime-lock.json")
+    parser.add_argument("--lock", type=Path, default=ROOT / "tools/native/runtime-lock.json")
+    parser.add_argument("--assets", type=Path, default=ROOT / "build/native/assets")
     args = parser.parse_args()
     if args.command == "lock":
         lock(args.output)
+    else:
+        build(args.lock, args.assets)
 
 
 if __name__ == "__main__":

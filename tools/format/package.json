@@ -7,7 +7,7 @@
     "prettier-plugin-java": "2.7.6"
   },
   "scripts": {
-    "format": "prettier --plugin=prettier-plugin-java --write '../../app/src/**/*.java' '../../core/*/src/**/*.java'",
-    "check": "prettier --plugin=prettier-plugin-java --check '../../app/src/**/*.java' '../../core/*/src/**/*.java'"
+    "format": "prettier --plugin=prettier-plugin-java --write '../../app/src/**/*.java' '../../core/*/src/**/*.java' '../../native-runtime/src/**/*.java' '../../terminal-ui/src/**/*.java'",
+    "check": "prettier --plugin=prettier-plugin-java --check '../../app/src/**/*.java' '../../core/*/src/**/*.java' '../../native-runtime/src/**/*.java' '../../terminal-ui/src/**/*.java'"
   }
 }
