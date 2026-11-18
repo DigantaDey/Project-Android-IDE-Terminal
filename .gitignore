@@ -1,0 +1,36 @@
+# ---- Gradle / Android build outputs ----
+.gradle/
+build/
+*/build/
+local.properties
+/.idea/
+*.iml
+.cxx/
+.externalNativeBuild/
+
+# ---- Kotlin/Java ----
+*.class
+*.jar.bak
+*.log
+
+# ---- Android ----
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+captures/
+*.hprof
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.swp
+
+# ---- Local verification artifacts ----
+/.localbuild/
+/out/
+
+# ---- Crash dumps ----
+hs_err_pid*.log
+
+/.local/

@@ -1,0 +1,37 @@
+package com.forgeide.core.language;
+
+/** Semantic token categories; the app maps them to theme colors. */
+public enum TokenType {
+    PLAIN,
+    WHITESPACE,
+    KEYWORD,
+    IDENTIFIER,
+    TYPE,
+    FUNCTION,
+    NUMBER,
+    STRING,
+    CHAR,
+    COMMENT,
+    DOC_COMMENT,
+    OPERATOR,
+    PUNCTUATION,
+    PREPROCESSOR,
+    ANNOTATION,
+    CONSTANT,
+    BUILTIN,
+    TAG,
+    ATTRIBUTE,
+    VALUE,
+    SELECTOR,
+    PROPERTY,
+    REGEX,
+    VARIABLE,
+    HEADING,
+    EMPHASIS,
+    STRONG,
+    CODE,
+    LINK,
+    QUOTE,
+    LIST_MARKER,
+    ERROR
+}
