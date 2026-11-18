@@ -42,7 +42,8 @@ public final class MainActivity extends Activity {
     public static final int EDITOR_ID = 1001,
         RUN_ID = 1002,
         SAVE_ID = 1003,
-        PALETTE_ID = 1004;
+        PALETTE_ID = 1004,
+        SECONDARY_EDITOR_ID = 1005;
     private static final int IMPORT_TREE = 31,
         IMPORT_ZIP = 32,
         EXPORT_ZIP = 33,
@@ -94,8 +95,14 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onCreate(Bundle saved) {
-        super.onCreate(saved);
         app = (ForgeApplication) getApplication();
+        boolean darkTheme =
+            app.settings.string("theme").equals("dark") ||
+            (app.settings.string("theme").equals("system") &&
+                (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES);
+        setTheme(darkTheme ? R.style.Theme_Forge : R.style.Theme_Forge_Light);
+        super.onCreate(saved);
         if (!app.fatalError.isEmpty()) {
             new AlertDialog.Builder(this)
                 .setTitle("Storage unavailable")
@@ -107,23 +114,32 @@ public final class MainActivity extends Activity {
         if (saved != null) pendingExportPath = saved.getString("pendingExportPath", "");
         chooseColors();
         wide = getResources().getConfiguration().screenWidthDp >= 840;
-        sidebarVisible = wide;
+        sidebarVisible = saved == null ? wide : saved.getBoolean("sidebar", wide);
         makeLayout();
         registerCommands();
         app.observers.add(observer);
         refreshTree();
         rebuildTabs();
-        ForgeApplication.OpenDocument doc = app.find(app.activePath);
+        ForgeApplication.OpenDocument doc = app.find(
+            saved == null ? app.activePath : saved.getString("primary", app.activePath)
+        );
         if (doc != null) display(doc, false);
+        if (saved != null) {
+            ForgeApplication.OpenDocument right = app.find(saved.getString("secondary", ""));
+            if (right != null) display(right, true);
+            if (!saved.getBoolean("focusRight", false)) focused = primary;
+        }
         restoreTerminals();
-        showPanel("Terminal");
+        terminalIndex = saved == null ? 0 : Math.min(saved.getInt("terminal", 0), terminals.size() - 1);
+        showPanel(saved == null ? "Terminal" : saved.getString("panel", "Terminal"));
+        if (saved != null) togglePanel(saved.getBoolean("panelVisible", true));
         refreshState();
         app.main.postDelayed(autosave, app.settings.integer("autosaveSeconds") * 1000L);
         if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
             android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
             this::back
         );
-        handleIncoming(getIntent());
+        if (saved == null) handleIncoming(getIntent());
     }
 
     private void chooseColors() {
@@ -201,6 +217,10 @@ public final class MainActivity extends Activity {
     private void makeLayout() {
         getWindow().setStatusBarColor(surface);
         getWindow().setNavigationBarColor(surface);
+        androidx.core.view.WindowInsetsControllerCompat bars =
+            new androidx.core.view.WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
+        bars.setAppearanceLightStatusBars(Color.luminance(bg) > 0.4);
+        bars.setAppearanceLightNavigationBars(Color.luminance(bg) > 0.4);
         root = column();
         root.setBackgroundColor(bg);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
@@ -329,10 +349,10 @@ public final class MainActivity extends Activity {
             TextView key = action(value, "Insert " + value, () -> symbol(value));
             key.setTextSize(15);
             key.setTextColor(text);
-            symbolRow.addView(key, new LinearLayout.LayoutParams(dp(40), dp(40)));
+            symbolRow.addView(key, new LinearLayout.LayoutParams(dp(44), dp(44)));
         }
         symbols.addView(symbolRow);
-        center.addView(symbols, new LinearLayout.LayoutParams(-1, dp(40)));
+        center.addView(symbols, new LinearLayout.LayoutParams(-1, dp(44)));
         panel = column();
         panel.setBackgroundColor(surface);
         View handle = new View(this);
@@ -385,6 +405,25 @@ public final class MainActivity extends Activity {
         panelBody = column();
         panel.addView(panelBody, new LinearLayout.LayoutParams(-1, 0, 1));
         center.addView(panel, new LinearLayout.LayoutParams(-1, dp(wide ? 238 : 200)));
+        Runnable sizePanel = () -> {
+            int available = center.getHeight();
+            if (available <= 0) return;
+            boolean input = terminalInput != null && terminalInput.hasFocus();
+            int height = Math.min(
+                dp(wide ? 238 : 200),
+                Math.max(dp(input ? 160 : 96), (int) (available * (input ? 0.68f : 0.36f)))
+            );
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) panel.getLayoutParams();
+            if (params.height != height) {
+                params.height = height;
+                panel.setLayoutParams(params);
+            }
+            breadcrumb.setVisibility(available < dp(330) ? View.GONE : View.VISIBLE);
+        };
+        center.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (b - t != ob - ot) sizePanel.run();
+        });
+        center.getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> sizePanel.run());
         LinearLayout statusRow = row();
         statusRow.setBackgroundColor(surface);
         busy = label("●", 11, accent);
@@ -464,6 +503,7 @@ public final class MainActivity extends Activity {
     private void display(ForgeApplication.OpenDocument doc, boolean right) {
         if (right && secondary == null) {
             secondary = createEditor();
+            secondary.setId(SECONDARY_EDITOR_ID);
             editorRow.addView(secondary, new LinearLayout.LayoutParams(0, -1, 1));
         }
         CodeEditor e = right ? secondary : primary;
@@ -760,7 +800,7 @@ public final class MainActivity extends Activity {
                         dir ? text : muted
                     );
                     item.setPadding(dp(12 + depth * 14), 0, dp(6), 0);
-                    item.setMinHeight(dp(38));
+                    item.setMinHeight(dp(44));
                     item.setOnClickListener(v -> {
                         if (dir) {
                             if (!expanded.add(path)) expanded.remove(path);
@@ -869,7 +909,7 @@ public final class MainActivity extends Activity {
                         );
                         break;
                     case 5:
-                        share(path);
+                        fileChange(() -> path, this::share);
                         break;
                     case 6:
                         gitWork(
@@ -1328,6 +1368,13 @@ public final class MainActivity extends Activity {
         }
     }
 
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIncoming(intent);
+    }
+
     private void handleIncoming(Intent intent) {
         Uri uri = intent.getData();
         if (uri == null && Intent.ACTION_SEND.equals(intent.getAction())) uri = intent.getParcelableExtra(
@@ -1336,6 +1383,31 @@ public final class MainActivity extends Activity {
         if (uri != null && "content".equals(uri.getScheme())) {
             Intent data = new Intent().setData(uri);
             onActivityResult(OPEN_FILE, RESULT_OK, data);
+        } else if (Intent.ACTION_SEND.equals(intent.getAction()) && intent.hasExtra(Intent.EXTRA_TEXT)) {
+            CharSequence shared = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+            if (shared == null) return;
+            if (shared.length() > Workspace.MAX_TEXT_BYTES) {
+                error(new IOException("Shared text exceeds the editable size limit"));
+                return;
+            }
+            String text = shared.toString();
+            Workspace owner = app.workspace;
+            input("Import shared text as", "shared.txt", name ->
+                background(
+                    "Importing shared text…",
+                    () -> {
+                        if (Files.exists(owner.resolve(name))) throw new IOException(
+                            "A file with that name already exists"
+                        );
+                        owner.writeChecked(name, text, "");
+                        return name;
+                    },
+                    path -> {
+                        refreshTree();
+                        if (app.workspace == owner) open(path);
+                    }
+                )
+            );
         }
     }
 
@@ -1943,6 +2015,20 @@ public final class MainActivity extends Activity {
                         }
                     }
                 )
+        );
+    }
+
+    private void runConfigured() {
+        Workspace owner = app.workspace;
+        fileChange(
+            () -> RunConfiguration.parse(owner.read(".forge/run.json")),
+            config -> {
+                if (app.workspace != owner) {
+                    toast("Project changed; run cancelled");
+                    return;
+                }
+                startRun(false, config.file, null);
+            }
         );
     }
 
@@ -3072,15 +3158,51 @@ public final class MainActivity extends Activity {
                         recoveryStatus();
                         break;
                     case 10:
-                        textDialog(
-                            "Forge IDE",
-                            "Native Android development workspace\nVersion " +
-                                BuildConfig.VERSION_NAME +
-                                "\n\nEditor: Sora 0.23.5 (LGPL-2.1+)\nhttps://github.com/Rosemoe/sora-editor/tree/0.23.5\nJavaScript: Mozilla Rhino 1.7.15 (MPL-2.0)\nGit: Eclipse JGit 5.13.3 (EDL-1.0 / BSD-3-Clause)\n\nAll source, build scripts, security notes and third-party notices are included in this repository. Native toolchains are optional; unavailable features are identified explicitly."
-                        );
+                        about();
                         break;
                 }
             }
+        );
+    }
+
+    private void about() {
+        new AlertDialog.Builder(this)
+            .setTitle("Forge IDE · " + BuildConfig.VERSION_NAME)
+            .setMessage(
+                "Native Android development workspace.\n\nSora 0.23.5 · Rhino 1.7.15 · AndroidX SQLite 2.6.2 · JGit 5.13.3.\n\nSource, build scripts, limitations and security notes: github.com/DigantaDey/Project-Android-IDE-Terminal\n\nUninstalled native toolchains are identified explicitly; no shell or compiler success is simulated."
+            )
+            .setPositiveButton("Close", null)
+            .setNeutralButton("Third-party notices", (d, w) -> thirdPartyNotices())
+            .show();
+    }
+
+    private void thirdPartyNotices() {
+        background(
+            "Reading licenses…",
+            () -> Arrays.asList(getAssets().list("")),
+            names ->
+                choose("Third-party notices", names, i ->
+                    background(
+                        "Opening license…",
+                        () -> {
+                            try (
+                                InputStream input = getAssets().open(names.get(i));
+                                ByteArrayOutputStream text = new ByteArrayOutputStream()
+                            ) {
+                                byte[] buffer = new byte[8192];
+                                int count;
+                                while ((count = input.read(buffer)) != -1) {
+                                    if (text.size() + count > 256 * 1024) throw new IOException(
+                                        "License file exceeds display limit"
+                                    );
+                                    text.write(buffer, 0, count);
+                                }
+                                return text.toString(StandardCharsets.UTF_8.name());
+                            }
+                        },
+                        value -> textDialog(names.get(i), value)
+                    )
+                )
         );
     }
 
@@ -3205,6 +3327,7 @@ public final class MainActivity extends Activity {
         addCommand("references", "Find textual references in project", "Shift+F12", this::references);
         addCommand("format", "Format JSON / clean whitespace", "Ctrl+Alt+L", this::format);
         addCommand("run", "Run current file", "F5", () -> startRun(false, null, null));
+        addCommand("runConfigured", "Run project configuration", "", this::runConfigured);
         addCommand("build", "Build / syntax check", "Ctrl+Shift+B", this::build);
         addCommand("debug", "Debug current JavaScript file", "Shift+F5", () -> startRun(true, null, null));
         addCommand("terminal", "Toggle terminal", "Ctrl+`", () -> {
@@ -3232,6 +3355,7 @@ public final class MainActivity extends Activity {
         addCommand("settings", "Open settings / change theme", "Ctrl+,", this::settingsDialog);
         addCommand("toolchains", "Toolchain / package manager availability", "", this::toolchains);
         addCommand("restore", "Restore deleted file", "", this::restoreTrash);
+        addCommand("licenses", "Third-party notices", "", this::thirdPartyNotices);
     }
 
     private void palette() {
@@ -3353,7 +3477,7 @@ public final class MainActivity extends Activity {
                 key;
             for (CommandRegistry.Command c : commands.search(""))
                 if (
-                    !c.shortcut.isEmpty() &&
+                    !shortcutOverrides.getOrDefault(c.id, c.shortcut).isEmpty() &&
                     shortcutOverrides.getOrDefault(c.id, c.shortcut).equalsIgnoreCase(chord)
                 ) {
                     commands.execute(c.id);
@@ -3465,6 +3589,13 @@ public final class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle state) {
         state.putString("pendingExportPath", pendingExportPath);
+        state.putString("primary", primaryDoc == null ? "" : primaryDoc.path);
+        state.putString("secondary", secondaryDoc == null ? "" : secondaryDoc.path);
+        state.putBoolean("focusRight", focused == secondary && secondary != null);
+        state.putString("panel", panelName);
+        state.putBoolean("panelVisible", panelVisible);
+        state.putBoolean("sidebar", sidebarVisible);
+        state.putInt("terminal", terminalIndex);
         super.onSaveInstanceState(state);
     }
 

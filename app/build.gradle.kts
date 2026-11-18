@@ -10,6 +10,7 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    sourceSets.getByName("main").assets.srcDir(rootProject.file("licenses"))
     buildFeatures { aidl = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

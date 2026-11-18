@@ -13,6 +13,7 @@ import java.util.*;
 /** Offline static HTML/CSS preview. Active code uses the isolated runtime, not privileged WebView bridges. */
 public final class PreviewActivity extends Activity {
 
+    public static final int PREVIEW_ID = 1010;
     private WebView browser;
     private Workspace workspace;
 
@@ -30,6 +31,7 @@ public final class PreviewActivity extends Activity {
         title.setOnClickListener(v -> finish());
         root.addView(title);
         browser = new WebView(this);
+        browser.setId(PREVIEW_ID);
         root.addView(browser, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         WebSettings s = browser.getSettings();

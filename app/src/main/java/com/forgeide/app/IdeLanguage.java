@@ -125,16 +125,28 @@ public final class IdeLanguage extends EmptyLanguage {
         String line = content.getLine(pos.line);
         int start = pos.column;
         while (start > 0 && com.forgeide.core.language.Language.isWordChar(line.charAt(start - 1))) start--;
+        if (pos.column - start > 128) return;
         String prefix = line.substring(start, pos.column);
         if (prefix.isEmpty()) return;
         Set<String> values = new TreeSet<>(language.keywords());
-        // A bounded neighbourhood gives useful document completion without a full-file scan per keypress.
+        // Bound characters and candidate count as well as line count. A single huge
+        // line in large-file mode must not allocate an unbounded completion tree.
+        int budget = 16384;
         for (
             int i = Math.max(0, pos.line - 100);
-            i < Math.min(content.getLineCount(), pos.line + 100);
+            i < Math.min(content.getLineCount(), pos.line + 100) && budget > 0;
             i++
-        ) for (String word : content.getLine(i).split("[^\\p{L}\\p{N}_$]+"))
-            if (!word.isEmpty()) values.add(word);
+        ) {
+            String sample = content.getLine(i);
+            int from = i == pos.line ? Math.max(0, pos.column - 2048) : 0;
+            sample = sample.substring(from, Math.min(sample.length(), from + Math.min(budget, 4096)));
+            budget -= sample.length();
+            for (String word : sample.split("[^\\p{L}\\p{N}_$]+")) {
+                if (!word.isEmpty() && word.length() <= 128) values.add(word);
+                if (values.size() >= 2000) break;
+            }
+            if (values.size() >= 2000) break;
+        }
         int count = 0;
         for (String word : values)
             if (word.startsWith(prefix) && !word.equals(prefix)) {

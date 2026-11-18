@@ -204,6 +204,18 @@ public final class Workspace {
         );
     }
 
+    public static boolean ignoredDirectory(String name) {
+        return Set.of(
+            ".git",
+            ".forge-trash",
+            "replace-backups",
+            "node_modules",
+            "build",
+            ".gradle",
+            ".venv"
+        ).contains(name);
+    }
+
     public List<String> files(int limit) throws IOException {
         List<String> out = new ArrayList<>();
         Files.walkFileTree(
@@ -214,16 +226,7 @@ public final class Workspace {
                 @Override
                 public FileVisitResult preVisitDirectory(Path d, BasicFileAttributes a) {
                     String n = d.getFileName().toString();
-                    return !d.equals(root) &&
-                        Set.of(
-                            ".git",
-                            ".forge-trash",
-                            "replace-backups",
-                            "node_modules",
-                            "build",
-                            ".gradle",
-                            ".venv"
-                        ).contains(n)
+                    return !d.equals(root) && ignoredDirectory(n)
                         ? FileVisitResult.SKIP_SUBTREE
                         : FileVisitResult.CONTINUE;
                 }

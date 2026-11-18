@@ -64,4 +64,19 @@ public class SettingsTest {
         assertEquals(14, settings.integer("fontSize"));
         assertEquals(4, settings.integer("tabSize"));
     }
+
+    @Test
+    public void importedProjectCannotWeakenGlobalSecurityPolicy() {
+        Settings settings = new Settings();
+        settings.set("requireHardLimits", true, false);
+        settings.set("requireHardLimits", false, true);
+        settings.set("executionSeconds", 60, true);
+        settings.set("outputKiB", 1024, true);
+        assertTrue(settings.bool("requireHardLimits"));
+        assertEquals(10, settings.integer("executionSeconds"));
+        assertEquals(256, settings.integer("outputKiB"));
+        settings.set("executionSeconds", 2, true);
+        assertEquals(2, settings.integer("executionSeconds"));
+        assertEquals(true, settings.snapshot().get("requireHardLimits"));
+    }
 }

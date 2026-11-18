@@ -3,6 +3,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      visual_report:
+        description: Emit a compact native screenshot in check annotations for restricted QA environments
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -20,21 +25,33 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/format/package-lock.json
+      - name: Verify Java source formatting
+        run: |
+          npm ci --prefix tools/format --ignore-scripts --no-audit --no-fund
+          npm --prefix tools/format run check
       - name: Compile, test and lint
         run: |
           set -o pipefail
           ./gradlew test :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --stacktrace 2>&1 | tee gradle-ci.log
+      - name: Record runtime dependencies
+        if: success()
+        run: ./gradlew :app:dependencies --configuration debugRuntimeClasspath > app/build/reports/runtime-dependencies.txt
       - name: Annotate build failure
         if: failure()
         run: python3 scripts/ci-diagnostics.py gradle-ci.log
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: test-and-lint-reports
           path: |
             core/*/build/reports/tests/
             app/build/reports/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: success()
         with:
           name: forge-ide-debug-apk
@@ -63,10 +80,13 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: bash scripts/device-tests.sh
+      - name: Optional visual QA transport
+        if: always() && (github.event.inputs.visual_report == 'true' || contains(github.event.head_commit.message, '[visual-qa]'))
+        run: python3 scripts/screenshot-diagnostics.py app/build/reports/device-screenshots
       - name: Annotate device failures
         if: failure()
         run: python3 scripts/ci-diagnostics.py device-ci.log app/build/outputs/androidTest-results
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: device-test-reports

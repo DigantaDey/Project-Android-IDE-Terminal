@@ -34,3 +34,6 @@ Thumbs.db
 hs_err_pid*.log
 
 /.local/
+
+# ---- Optional source-formatting tooling ----
+node_modules/

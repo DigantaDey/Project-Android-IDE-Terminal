@@ -37,6 +37,10 @@ public final class SandboxDeviceTest {
     @Test
     public void runtimeHasDifferentUidAndNoNetworkPermission() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        com.forgeide.core.util.AtomicFiles.write(
+            new java.io.File(context.getFilesDir(), "state/isolation-witness.txt").toPath(),
+            "host-private-fixture"
+        );
         ExecutionClient client = new ExecutionClient(context);
         AtomicReference<CompletableFuture<Integer>> completion = new AtomicReference<>();
         AtomicReference<JsonObject> identity = new AtomicReference<>();
@@ -67,6 +71,7 @@ public final class SandboxDeviceTest {
         assertFalse(ready.getBoolean("hostFilesReadable", true));
         assertTrue(ready.getBoolean("isolated", false));
         assertFalse(ready.getBoolean("networkPermission", true));
+        assertTrue("Kernel must deny socket creation", ready.getBoolean("networkSocketDenied", false));
     }
 
     @Test
@@ -176,6 +181,121 @@ public final class SandboxDeviceTest {
         Integer exit = result.get().get(15, TimeUnit.SECONDS);
         assertEquals(output.toString(), Integer.valueOf(0), exit);
         assertTrue(output.toString(), output.toString().contains("42"));
+    }
+
+    @Test
+    public void sqlCannotAttachHostFilesOrLoadNativeExtensions() throws Exception {
+        for (String source : List.of(
+            "ATTACH '/data/local/tmp/forbidden.db' AS host;",
+            "SELECT load_extension('/system/lib64/libc.so');"
+        )) {
+            ExecutionClient client = new ExecutionClient(
+                InstrumentationRegistry.getInstrumentation().getTargetContext()
+            );
+            AtomicReference<CompletableFuture<Integer>> completion = new AtomicReference<>();
+            StringBuffer output = new StringBuffer();
+            RunConfiguration sql = new RunConfiguration(
+                "SQL security",
+                "sql",
+                "test.sql",
+                "",
+                List.of(),
+                Map.of(),
+                "",
+                List.of(),
+                List.of(),
+                List.of()
+            );
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+                completion.set(
+                    client.run(
+                        source,
+                        sql,
+                        SandboxPolicy.safeDefault(),
+                        List.of(),
+                        false,
+                        output::append,
+                        output::append,
+                        s -> {}
+                    )
+                )
+            );
+            int exit = completion.get().get(15, TimeUnit.SECONDS);
+            assertEquals(output.toString(), 1, exit);
+        }
+    }
+
+    @Test
+    public void sqliteNativeWorkIsStoppedByAnExternalWatchdog() throws Exception {
+        ExecutionClient client = new ExecutionClient(
+            InstrumentationRegistry.getInstrumentation().getTargetContext()
+        );
+        AtomicReference<CompletableFuture<Integer>> completion = new AtomicReference<>();
+        StringBuffer output = new StringBuffer();
+        RunConfiguration sql = new RunConfiguration(
+            "SQL deadline",
+            "sql",
+            "test.sql",
+            "",
+            List.of(),
+            Map.of(),
+            "",
+            List.of(),
+            List.of(),
+            List.of()
+        );
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+            completion.set(
+                client.run(
+                    "WITH RECURSIVE counter(x) AS (SELECT 0 UNION ALL SELECT x+1 FROM counter) SELECT sum(x) FROM counter;",
+                    sql,
+                    new SandboxPolicy(500, 1024, SandboxPolicy.safeDefault().required),
+                    List.of(),
+                    false,
+                    output::append,
+                    output::append,
+                    s -> {}
+                )
+            )
+        );
+        int exit = completion.get().get(12, TimeUnit.SECONDS);
+        assertTrue("exit=" + exit + " " + output, exit == 124 || exit == 137);
+    }
+
+    @Test
+    public void completedRunCancellationTokenCannotCancelANewerRun() throws Exception {
+        ExecutionClient client = new ExecutionClient(
+            InstrumentationRegistry.getInstrumentation().getTargetContext()
+        );
+        com.forgeide.app.execution.IsolatedToolchain provider =
+            new com.forgeide.app.execution.IsolatedToolchain("javascript", client);
+        com.forgeide.core.util.CancellationToken old = new com.forgeide.core.util.CancellationToken(),
+            current = new com.forgeide.core.util.CancellationToken();
+        AtomicReference<CompletableFuture<Integer>> first = new AtomicReference<>(),
+            second = new AtomicReference<>();
+        CountDownLatch ready = new CountDownLatch(1);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+            first.set(provider.run("print(1);", config(), SandboxPolicy.safeDefault(), old, s -> {}, s -> {}))
+        );
+        assertEquals(Integer.valueOf(0), first.get().get(15, TimeUnit.SECONDS));
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+            second.set(
+                provider.run(
+                    "print('ready');while(true){}",
+                    config(),
+                    SandboxPolicy.safeDefault(),
+                    current,
+                    s -> ready.countDown(),
+                    s -> {}
+                )
+            )
+        );
+        assertTrue(ready.await(10, TimeUnit.SECONDS));
+        old.cancel();
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        assertTrue(client.running());
+        current.cancel();
+        assertEquals(Integer.valueOf(130), second.get().get(5, TimeUnit.SECONDS));
     }
 
     @Test
