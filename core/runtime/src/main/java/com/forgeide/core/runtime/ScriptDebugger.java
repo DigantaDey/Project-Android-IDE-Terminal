@@ -19,13 +19,13 @@ public final class ScriptDebugger implements Debugger {
     public synchronized void finished(){done=true;paused=false;notifyAll();}
     @Override public void handleCompilationDone(Context cx,DebuggableScript script,String source){}
     @Override public DebugFrame getFrame(Context cx,DebuggableScript script){return evaluating?null:new Frame(script);}
-    private static String value(Object o){if(o==Scriptable.NOT_FOUND)return "<not defined>";if(o==Undefined.instance)return "undefined";if(o==null)return "null";if(o instanceof Scriptable)return "[object]";String s=String.valueOf(o);return s.length()>300?s.substring(0,300)+"…":s;}
+    private static String value(Object o){if(o==Scriptable.NOT_FOUND)return "<not defined>";if(o==Undefined.instance)return "undefined";if(o==null)return "null";if(o instanceof Scriptable)return "[object]";String s=o instanceof Number||o instanceof Boolean||o instanceof CharSequence?Context.toString(o):String.valueOf(o);return s.length()>300?s.substring(0,300)+"…":s;}
     private Object evaluate(Context cx,String expression,Frame frame){evaluating=true;try{return cx.evaluateString(frame.scope,expression,"<watch>",1,null);}finally{evaluating=false;}}
     private String snapshot(String reason){
         List<Object> frames=new ArrayList<>();int count=0;
         for(Frame f:stack){if(++count>64)break;Map<String,Object> variables=new LinkedHashMap<>();int n=0;
             for(Object key:f.scope.getIds()){if(++n>100)break;Object v=key instanceof Number?f.scope.get(((Number)key).intValue(),f.scope):f.scope.get(key.toString(),f.scope);variables.put(key.toString(),value(v));}
-            frames.add(Map.of("name",f.script.getFunctionName().isEmpty()?"<main>":f.script.getFunctionName(),"file",f.script.getSourceName(),"line",f.line,"variables",variables));
+            frames.add(Map.of("name",(f.script.getFunctionName()==null||f.script.getFunctionName().isEmpty())?"<main>":f.script.getFunctionName(),"file",f.script.getSourceName(),"line",f.line,"variables",variables));
         }return Json.write(Map.of("event","stopped","reason",reason,"stack",frames));
     }
     private final class Frame implements DebugFrame {
