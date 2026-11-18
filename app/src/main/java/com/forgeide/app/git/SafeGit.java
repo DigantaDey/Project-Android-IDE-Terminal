@@ -41,7 +41,7 @@ public final class SafeGit implements GitService {
         if(Files.exists(meta.resolve("commondir"))||Files.exists(meta.resolve("objects/info/alternates")))throw new IOException("External Git object/worktree stores are not permitted");
         String config=com.forgeide.core.util.AtomicFiles.readUtf8(workspace.resolve(".git/config"));if(config.matches("(?is).*(\\[\\s*(include|includeIf|filter|url|gpg)\\b|sshCommand|hooksPath).*"))throw new IOException("Repository config contains unsupported external integrations");
         Repository r=new FileRepositoryBuilder().setGitDir(meta.toFile()).setWorkTree(workspace.root().toFile()).setFS(new NoExecFS()).build();
-        r.getConfig().setBoolean("commit",null,"gpgsign",false);r.getConfig().setBoolean("core",null,"symlinks",false);git=new Git(r);return git;
+        r.getConfig().setString("http",null,"followRedirects","false");r.getConfig().setBoolean("commit",null,"gpgsign",false);r.getConfig().setBoolean("core",null,"symlinks",false);git=new Git(r);return git;
     }
     @Override public void init()throws Exception{if(Files.exists(workspace.resolve(".git")))return;try(Git created=Git.init().setDirectory(workspace.root().toFile()).setFs(new NoExecFS()).call()){created.getRepository().getConfig().setBoolean("core",null,"symlinks",false);created.getRepository().getConfig().save();}}
     @Override public List<Change> status()throws Exception{Status s=git().status().call();Map<String,String> paths=new TreeMap<>();for(String p:s.getUntracked())paths.put(p,"?");for(String p:s.getModified())paths.put(p,"M");for(String p:s.getAdded())paths.put(p,"A");for(String p:s.getChanged())paths.put(p,"M");for(String p:s.getMissing())paths.put(p,"D");for(String p:s.getRemoved())paths.put(p,"D");for(String p:s.getConflicting())paths.put(p,"U");List<Change> out=new ArrayList<>();paths.forEach((p,v)->out.add(new Change(p,v)));return out;}
@@ -53,7 +53,7 @@ public final class SafeGit implements GitService {
     @Override public void checkout(String branch,boolean create)throws Exception{if(!Repository.isValidRefName("refs/heads/"+branch))throw new IOException("Invalid branch name");git().checkout().setName(branch).setCreateBranch(create).call();}
     @Override public void merge(String branch)throws Exception{Ref r=git().getRepository().findRef(branch);if(r==null)throw new IOException("Branch does not exist");MergeResult result=git().merge().include(r).call();if(!result.getMergeStatus().isSuccessful())throw new IOException("Merge "+result.getMergeStatus()+". Resolve conflicts in the editor, then commit.");}
     @Override public void stash(boolean pop)throws Exception{if(pop){git().stashApply().call();git().stashDrop().call();}else git().stashCreate().call();}
-    private CredentialsProvider credentials(String remote)throws Exception{java.net.URI uri=RemotePolicy.https(remote);if(!uri.getHost().equalsIgnoreCase("github.com"))return null;String token=vault.read();return token.isEmpty()?null:new UsernamePasswordCredentialsProvider("x-access-token",token);}
+    private CredentialsProvider credentials(String remote)throws Exception{java.net.URI uri=RemotePolicy.https(remote);if(!uri.getHost().equalsIgnoreCase("github.com"))return null;String token=vault.read();return token.isEmpty()?null:new UsernamePasswordCredentialsProvider("x-access-token",token){@Override public boolean get(URIish uri,CredentialItem... items){return "https".equalsIgnoreCase(uri.getScheme())&&"github.com".equalsIgnoreCase(uri.getHost())&&(uri.getPort()==-1||uri.getPort()==443)&&super.get(uri,items);}};}
     private static ProgressMonitor progress(CancellationToken cancel){return new ProgressMonitor(){public void start(int n){}public void beginTask(String t,int n){}public void update(int n){}public void endTask(){}public boolean isCancelled(){return cancel.isCancelled();}};}
     @Override public void remote(String operation,CancellationToken cancel)throws Exception{
         String remote=git().getRepository().getConfig().getString("remote","origin","url");if(remote==null)throw new IOException("Configure an origin HTTPS URL first");CredentialsProvider creds=credentials(remote);
@@ -64,6 +64,15 @@ public final class SafeGit implements GitService {
         else throw new IOException("Unknown remote operation");
     }
     public void origin(String url)throws Exception{RemotePolicy.https(url);StoredConfig config=git().getRepository().getConfig();config.setString("remote","origin","url",url);config.setString("remote","origin","fetch","+refs/heads/*:refs/remotes/origin/*");config.save();}
-    public void cloneFrom(String url,CancellationToken cancel)throws Exception{RemotePolicy.https(url);init();origin(url);remote("fetch",cancel);Collection<Ref> refs=git().getRepository().getRefDatabase().getRefsByPrefix("refs/remotes/origin/");String branch=refs.stream().anyMatch(r->r.getName().equals("refs/remotes/origin/main"))?"main":"master";git().checkout().setName(branch).setCreateBranch(true).setStartPoint("origin/"+branch).setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK).call();}
+    public void cloneFrom(String url,CancellationToken cancel)throws Exception{
+        RemotePolicy.https(url);init();origin(url);
+        FetchResult fetched=git().fetch().setRemote("origin").setTimeout(30).setProgressMonitor(progress(cancel)).setCredentialsProvider(credentials(url)).call();
+        Ref head=fetched.getAdvertisedRef(Constants.HEAD);String ref=null;
+        if(head!=null&&head.isSymbolic())ref=head.getTarget().getName();
+        if(ref==null&&head!=null)for(Ref r:fetched.getAdvertisedRefs())if(r.getName().startsWith(Constants.R_HEADS)&&r.getObjectId().equals(head.getObjectId())){ref=r.getName();break;}
+        if(ref==null)for(Ref r:fetched.getAdvertisedRefs())if(r.getName().startsWith(Constants.R_HEADS)){ref=r.getName();break;}
+        if(ref==null)return;String branch=Repository.shortenRefName(ref);
+        git().checkout().setName(branch).setCreateBranch(true).setStartPoint("origin/"+branch).setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK).call();
+    }
     @Override public void close(){if(git!=null){git.close();git=null;}}
 }

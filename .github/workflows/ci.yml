@@ -62,7 +62,13 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+          script: |
+            set -o pipefail; ./gradlew :app:connectedDebugAndroidTest --stacktrace 2>&1 | tee device-ci.log
+            mkdir -p app/build/reports/device-screenshots
+            adb pull /sdcard/Android/data/com.forgeide.app/files/test-screenshots app/build/reports/device-screenshots
+      - name: Annotate device failures
+        if: failure()
+        run: python3 scripts/ci-diagnostics.py device-ci.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -70,3 +76,4 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            app/build/reports/device-screenshots/

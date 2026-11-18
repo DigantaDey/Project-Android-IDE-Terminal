@@ -36,11 +36,13 @@ public final class TerminalSession {
     private String path(String value) throws IOException {
         if (value.startsWith("/project/")) value = value.substring(9);
         else if (value.equals("/project") || value.equals("~")) value = "";
+        else if (value.startsWith("/")) throw new IOException("Host absolute paths are not accessible");
         else if (!cwd.isEmpty()) value = cwd + "/" + value;
         return workspace.relative(workspace.resolve(value));
     }
     private static void args(List<String> argv, int n) { if (argv.size() < n + 1) throw new IllegalArgumentException("Missing argument; type help"); }
     private static String bounded(String s) { return s.length() > 262144 ? s.substring(0, 262144) + "\n[output truncated]\n" : s; }
+    public static String redactCommand(String command) { return command.matches("(?is).*(token|password|secret|authorization)\\s*=.*") ? "[credential assignment redacted]" : command; }
     public synchronized Result execute(String command, CancellationToken cancel) {
         if (command.length() > 16384) return new Result("", "Command exceeds 16 KiB\n", 2);
         // History is project-local. Never keep commands that appear to contain a credential assignment.
