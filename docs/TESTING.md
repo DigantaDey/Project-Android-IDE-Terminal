@@ -18,7 +18,7 @@ Do not commit APKs, Gradle caches, SDKs, downloaded runtimes, credentials, or lo
 
 ## Device integration
 
-Start a hardware-accelerated emulator (CI uses API 29 x86_64 / Pixel 2), or connect an Android 8.0+ device with debugging enabled:
+Start a hardware-accelerated emulator (CI uses API 26/29 x86_64 phones and an API 35 x86_64 tablet), or connect an Android 8.0+ device with debugging enabled:
 
 ```bash
 ./gradlew :app:connectedDebugAndroidTest
@@ -47,11 +47,11 @@ An optional offline ECJ/JUnit harness exists at `scripts/test-local.sh` for rest
 `.github/workflows/ci.yml` runs two required verification stages:
 
 1. Core Gradle tests, Android app + test APK compilation, and Android lint.
-2. Hardware-accelerated emulator instrumentation after a successful build.
+2. Hardware-accelerated emulator instrumentation after a successful build: API 26 phone, API 29 phone, and API 35 tablet. Matrix failures do not cancel the other device cases.
 
 The device stage also requires nonempty instrumentation XML and publishes the passed/failed/skipped count. A newer push cancels an older in-progress run. A cancelled emulator is not a passed emulator. Check the exact HEAD commit's run, not an older green build.
 
-Artifacts: **forge-ide-debug-apk**, **test-and-lint-reports**, and **device-test-reports**. Failure diagnostics are also emitted as GitHub check annotations, including instrumentation XML failures, so assertion messages remain visible if artifact download is unavailable.
+Artifacts: **forge-ide-debug-apk**, **test-and-lint-reports**, and **device-test-reports-api-…**. Failure diagnostics are also emitted as GitHub check annotations, including instrumentation XML failures, so assertion messages remain visible if artifact download is unavailable.
 
 ## Manual release matrix
 
@@ -79,4 +79,4 @@ npm --prefix tools/format run format
 
 The lockfile pins Prettier and its Java plugin. No package-manager functionality is implied inside the Android app.
 
-For a restricted QA environment that cannot follow GitHub's artifact-storage redirects, a manual workflow dispatch can enable `visual_report=true`, or a deliberate `[visual-qa]` commit-message marker can opt in on a branch that has not yet added its workflow to the default branch. It emits only the small fixture-workspace JPEG as machine-readable check notices. A test-only instrumentation flag records bounded thumbnail chunks under a dedicated log tag if runner uninstall prevents direct retrieval; the reporter rejects missing/incomplete data. Normal push CI only uploads the PNG artifact and does not log thumbnail bytes. Never enable screenshot transport for a run using private user projects or credentials.
+For a restricted QA environment that cannot follow GitHub's artifact-storage redirects, a manual workflow dispatch can enable `visual_report=true`, or a deliberate `[visual-qa]` commit-message marker can opt in on a branch that has not yet added its workflow to the default branch. It emits only the small fixture-workspace JPEG as machine-readable check notices. A test-only instrumentation flag records bounded thumbnail chunks under a dedicated log tag if runner uninstall prevents direct retrieval; the reporter rejects missing/incomplete data and publishes a byte-count/chunk-count/SHA-256 manifest. Notice chunks stay below the checks API’s 4 KiB message truncation limit; verify that manifest when reconstructing a thumbnail. Normal push CI only uploads the PNG artifact and does not log thumbnail bytes. Never enable screenshot transport for a run using private user projects or credentials.

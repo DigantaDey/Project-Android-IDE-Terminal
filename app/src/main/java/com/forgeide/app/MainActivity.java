@@ -219,7 +219,10 @@ public final class MainActivity extends Activity {
 
     private void makeLayout() {
         getWindow().setStatusBarColor(surface);
-        getWindow().setNavigationBarColor(surface);
+        // API 26 cannot draw dark navigation icons; keep its light-theme bar dark for contrast.
+        getWindow().setNavigationBarColor(
+            Build.VERSION.SDK_INT < 27 && Color.luminance(bg) > 0.4 ? Color.rgb(17, 19, 24) : surface
+        );
         androidx.core.view.WindowInsetsControllerCompat bars =
             new androidx.core.view.WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
         bars.setAppearanceLightStatusBars(Color.luminance(bg) > 0.4);

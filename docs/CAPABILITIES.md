@@ -72,4 +72,4 @@ Not implemented: SSH keys/agent, signed commits, native hooks, LFS processes, cr
 
 ## Verification scope
 
-Core behavior has automated JUnit coverage; Android build, lint, and emulator integration are separate CI checks. Device tests cover native editing/recreation/recovery, actual local Git and disabled hooks, Keystore round trips, runtime identity/permission behavior, deadlines, cancel/rerun, SQLite, and strict-policy refusal. Read the result of the **specific commit's CI run** rather than assuming a feature was tested on every phone, tablet, foldable, API level, or OEM ROM.
+Core behavior has automated JUnit coverage; Android build/lint and API 26/29 phone + API 35 tablet emulator integration are separate CI checks. Device tests cover native editing/recreation/recovery, actual local Git and disabled hooks, Keystore round trips, runtime identity/permission behavior, deadlines, cancel/rerun, SQLite, and strict-policy refusal. Read the result of the **specific commit's CI run** rather than assuming a feature was tested on every phone, tablet, foldable, API level, or OEM ROM.
