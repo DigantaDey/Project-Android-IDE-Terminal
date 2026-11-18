@@ -21,6 +21,7 @@ public final class NativeTerminalActivity extends Activity {
     private NativeTerminalState state;
     private TerminalView terminal;
     private int font = 14;
+    private boolean keepSession;
 
     @Override
     public void onCreate(Bundle saved) {
@@ -219,7 +220,10 @@ public final class NativeTerminalActivity extends Activity {
             .setMessage(
                 "This stops its native jobs and discards the project copy, including installed npm dependencies. Export any changes first; the IDE originals are unchanged."
             )
-            .setNegativeButton("Keep terminal", null)
+            .setNegativeButton("Back to editor", (d, w) -> {
+                keepSession = true;
+                finish();
+            })
             .setNeutralButton("Export…", (d, w) ->
                 startActivityForResult(
                     new Intent(Intent.ACTION_CREATE_DOCUMENT)
@@ -240,7 +244,7 @@ public final class NativeTerminalActivity extends Activity {
     protected void onDestroy() {
         if (state != null) {
             if (state.view == terminal) state.view = null;
-            if (isFinishing()) {
+            if (isFinishing() && !keepSession) {
                 app.nativeRuntime.stop(state.run);
                 if (app.nativeTerminal == state) app.nativeTerminal = null;
             }

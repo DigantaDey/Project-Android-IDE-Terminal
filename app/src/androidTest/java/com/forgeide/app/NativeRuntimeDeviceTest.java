@@ -116,7 +116,10 @@ public final class NativeRuntimeDeviceTest {
                 connection.countDown();
             }
         );
-        active.result.whenComplete((exit, error) -> connection.countDown());
+        active.result.whenComplete((exit, error) -> {
+            if (error != null) output.append("Native run failed: ").append(error);
+            connection.countDown();
+        });
         return active;
     }
 
@@ -311,19 +314,27 @@ public final class NativeRuntimeDeviceTest {
             true,
             bytes -> {
                 terminalOutput.append(new String(bytes, StandardCharsets.UTF_8));
-                if (terminalOutput.toString().contains("\r\nTTY_READY_42\r\n")) first.countDown();
-                if (terminalOutput.toString().contains("\r\nAFTER_INTERRUPT_42\r\n")) after.countDown();
+                if (terminalOutput.toString().contains("TTY_READY_42_32_100\r\n")) first.countDown();
+                if (terminalOutput.toString().contains("AFTER_INTERRUPT_42\r\n")) after.countDown();
             }
         );
         assertTrue(
             "Native Bash must actually reach its launch callback",
             connected.await(110, TimeUnit.SECONDS)
         );
-        assertNotNull("Native Bash launch failed: " + output, identity.get());
+        assertNotNull(
+            "Native Bash launch failed: " +
+                output +
+                "; completion=" +
+                pty.result
+                    .handle((exit, error) -> error == null ? String.valueOf(exit) : error.toString())
+                    .getNow("still running"),
+            identity.get()
+        );
         app.nativeRuntime.resize(pty, 32, 100);
         app.nativeRuntime.write(
             pty,
-            "test -t 0 && printf '\\x54\\x54\\x59_READY_%d\\n' \"$((6*7))\"; while :; do :; done\r".getBytes(
+            "bash --noprofile --norc -c 'test -t 0 || exit 1; set -- $(stty size); printf \"\\x54\\x54\\x59_READY_%d_%s_%s\\n\" \"$((6*7))\" \"$1\" \"$2\"; exec sleep 60'\r".getBytes(
                 StandardCharsets.UTF_8
             )
         );
@@ -331,11 +342,12 @@ public final class NativeRuntimeDeviceTest {
         app.nativeRuntime.write(pty, new byte[] { 3 });
         app.nativeRuntime.write(
             pty,
-            "printf '\\x41\\x46\\x54\\x45\\x52_INTERRUPT_%d\\n' \"$((6*7))\"\r".getBytes(
+            "printf '\\x50\\x49\\x50\\x45_RESULT_'; printf '%d\\n' 42 | cat; printf '\\x41\\x46\\x54\\x45\\x52_INTERRUPT_%d\\n' \"$((6*7))\"\r".getBytes(
                 StandardCharsets.UTF_8
             )
         );
         assertTrue(terminalOutput.toString(), after.await(20, TimeUnit.SECONDS));
+        assertTrue(terminalOutput.toString(), terminalOutput.toString().contains("PIPE_RESULT_42\r\n"));
         app.nativeRuntime.stop(pty);
         assertEquals(Integer.valueOf(130), pty.result.get(10, TimeUnit.SECONDS));
         AtomicReference<NativeTerminalState> retained = new AtomicReference<>();

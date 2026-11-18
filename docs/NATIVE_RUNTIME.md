@@ -74,7 +74,10 @@ time/output limits. Native stdout/stderr are merged by the PTY.
 
 Native networking and npm lifecycle installation scripts default **off**, with
 separate explicit warnings in Settings. With network off, the launcher installs
-an inherited seccomp filter that denies non-UNIX sockets and sets npm offline.
+an inherited seccomp filter that denies socket creation/connect/send-address
+operations and sets npm offline. Local preconnected socketpair/pipe I/O remains
+available for child-process communication; new UNIX socket clients are blocked
+too, preventing resolver/proxy bypasses.
 If restrictions cannot be installed, it refuses execution. With network enabled,
 native code can use the companion's INTERNET permission. Only run code you trust.
 Changing either preference stops the current native session.
@@ -100,7 +103,8 @@ Runtime-generated data and output are untrusted.
 This is a **separate regular app UID**, not Android `isolatedProcess`. Native tools
 can create processes and access their companion UID's own files. They are not
 isolated from one another. The app's stricter JS/SQL isolated service is unchanged.
-Native children cannot ptrace/process_vm-read their service parent. Basic process,
+Native children cannot ptrace/process_vm-read their service parent, issue Android
+Binder transactions, or use io_uring to bypass the syscall policy. Basic process,
 open-FD and individual-file resource limits apply, but no hard aggregate memory,
 disk-volume or CPU-share quota is claimed. Strict hard-limit policy refuses native
 execution. Stop/deadline kills companion-UID native jobs, including job-control
