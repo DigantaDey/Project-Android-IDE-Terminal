@@ -9,7 +9,7 @@ The **Welcome** project opens a real JavaScript file, not a static demo screen. 
 - Top bar: command palette, save-all, run, and more commands.
 - Tabs: tap to select; long-press for file actions; × closes with a save/discard prompt when needed.
 - Bottom panels: Terminal, Output, Problems, Debugger, Search, Git, Logs. Tap a tab to reopen a hidden panel. Drag the panel divider to resize.
-- Explorer folders: tap to expand; long-press for folder operations. Long-press a file for rename/move, duplicate, trash, share, export, and history actions.
+- Explorer folders: tap to expand; long-press for folder operations. Long-press a file for rename/move, duplicate, trash, share, export, and history actions. Explorer renames preserve open buffers, recovery paths, the active tab, and breakpoint conditions; duplication keeps the original intact.
 - **Split / unsplit editor** shares the actual document/undo history. Tap a pane to focus it. Split panes do not create independent copies of the file.
 
 Narrow windows start with the explorer hidden. Wider windows show it alongside the editor. Orientation and window-size changes recreate the native layout while preserving process-lifetime documents and undo history.
@@ -62,13 +62,13 @@ Project replacement requires confirmation and closed affected tabs. Each file is
 
 All active projects are under app-private storage. Importing a folder through Android's document picker copies it into a private project. Subsequent edits do **not** synchronize back to the selected folder. Use export/share to write out a deliberate copy.
 
-ZIP import has traversal, duplicate-entry, depth, entry-count, and extracted-size limits. It only imports into a new empty project. ZIP export is a source/project backup, not a Git mirror or dependency cache backup: `.git`, trash, generated build/dependency trees, and replace-backup trees are excluded.
+Individual provider-file imports are staged and published only after the bounded stream succeeds; failures and conflicting destinations do not truncate or delete an existing file. ZIP import has traversal, duplicate-entry, depth, entry-count, and extracted-size limits. It only imports into a new empty project. ZIP export is a source/project backup, not a Git mirror or dependency cache backup: `.git`, trash, generated build/dependency trees, and replace-backup trees are excluded.
 
 Files moved to **project trash** retain restoration metadata separate from their original names. Use **Restore deleted file** in the palette. Restore refuses to overwrite a new file at the old path.
 
 Autosave is configurable (15 seconds by default). Independently, edits schedule a recovery journal after a short debounce (600 ms). Recovery journals live outside projects and contain checksums, the last known disk digest, and the unsaved text. Failed/conflicting saves preserve recovery data and report the error; they do not silently replace an externally changed file.
 
-Recovery is automatic when a project is reopened. **Storage & recovery** lists journal/storage status. Export important work regularly: a device reset, uninstall, storage failure, or Android kill before a journal flush can still lose work. Recovery is not a cloud backup.
+Recovery is automatic when a project is reopened. A damaged journal is reported and retained, while healthy journals continue to recover. The newest journals are restored within the 20-tab limit; overflow remains on disk with a warning. Save/close restored tabs and reopen the project to recover remaining entries. **Storage & recovery** lists journal/storage status. Export important work regularly: a device reset, uninstall, storage failure, or Android kill before a journal flush can still lose work. Recovery is not a cloud backup.
 
 ## Running JavaScript
 
@@ -81,7 +81,7 @@ print('Setting:', env.MODE);
 print('Input:', readLine());
 ```
 
-**Run project configuration** uses the `file` field. **Run current file** runs the selected file and uses `.forge/run.json` for launch options. The built-in provider is chosen for the current file's language. Example:
+**Run project configuration** uses the `file` and `toolchain` fields and refuses unavailable or language-mismatched providers instead of silently substituting one. **Run current file** runs the selected file and uses `.forge/run.json` for launch options. The built-in provider is chosen for the current file's language. Example:
 
 ```json
 {
@@ -98,9 +98,9 @@ print('Input:', readLine());
 }
 ```
 
-Do not put credentials in source, environment, or launch JSON. Run data is intentionally visible to the program. Terminal `run path.js arg1 …` passes its session arguments, environment, and cwd to the launch. Working directory is validated as project-relative, but the bundled interpreters expose no filesystem API. Non-empty command arrays require another compatible provider and are refused by the built-ins.
+Do not put credentials in source, environment, or launch JSON. Run data is intentionally visible to the program. Terminal `run path.js arg1 …` passes its session arguments, environment, and cwd to the launch. Working directory must name an existing project-relative directory, but the bundled interpreters expose no filesystem API. Non-empty command arrays require another compatible provider and are refused by the built-ins.
 
-Execution defaults to 10 seconds and 256 KiB of output, configurable within safe ranges. Debugging allows up to 60 seconds **including pauses**. The service watchdog also stops work outside interpreter checks. Exit codes include 0 (success), 1 (program/runtime error), 124 (deadline/output limit), 130 (user cancellation), and 137 (service/Android termination). Read the accompanying message; Android may terminate an isolated process under resource pressure.
+Execution defaults to 10 seconds and 256 KiB of output, configurable within safe ranges. Debugging obeys the same effective global/project time and output ceilings, **including pauses**. Increase the global execution timeout (up to 60 seconds) explicitly when you need longer debug sessions; debugging cannot bypass a stricter project/global policy. The service watchdog also stops work outside interpreter checks. Exit codes include 0 (success), 1 (program/runtime error), 124 (deadline/output limit), 130 (user cancellation), and 137 (service/Android termination). Read the accompanying message; Android may terminate an isolated process under resource pressure.
 
 ## Running SQL
 
@@ -116,7 +116,7 @@ Statements, quoted semicolons, comments, and trigger bodies are split without in
 
 ## Debugging JavaScript
 
-Set breakpoints at the cursor (F9), optionally add conditions, then choose **Debug current JavaScript file**. The debugger initially pauses on an executable line. The panel provides continue, pause, step into/over/out, watch evaluation, and stop. Stack/variable snapshots are bounded; source navigation selects the stopped line.
+Set breakpoints at the cursor (F9), optionally add conditions, then choose **Debug current JavaScript file**. The debugger initially pauses on an executable line. The panel provides continue, pause, step into/over/out, watch evaluation, and stop. Stack/variable snapshots are bounded; source navigation selects the stopped line, including after Activity recreation. Resume events show running rather than leaving a stale paused label.
 
 Breakpoint definitions are passed at launch; restart to apply changed definitions. Watch expressions run inside the isolated program and can have side effects. Do not use watches as a credential store. If the process dies, the editor/recovery state remains separate from the program.
 
@@ -130,7 +130,7 @@ help pwd cd ls cat echo touch mkdir cp mv rm find head tail grep wc env export u
 
 `run` launches through the isolated provider. Read-only Git commands use the IDE's trusted Git service. State-changing/network Git operations use the Git UI so consent remains visible. Unsupported commands return an error, never host-shell execution.
 
-This is **not a PTY**. Pipes, redirects, native shells, interactive OS jobs, ANSI emulation, arbitrary executables, and package managers are unavailable. `rm` moves files to recoverable project trash. Cwd/history/output persist; native processes cannot be restored. Terminal environment values are session-local and are not written into the persisted history state. Treat transcripts as project data, not a password manager.
+This is **not a PTY**. Pipes, redirects, native shells, interactive OS jobs, ANSI emulation, arbitrary executables, and package managers are unavailable. `rm` moves files to recoverable project trash. Shell mutations refuse paths backing an open editor buffer; close affected tabs first or use the explorer to rename an open document safely. Cwd/history/output persist; native processes cannot be restored. Terminal environment values are session-local and are not written into the persisted history state. Treat transcripts as project data, not a password manager.
 
 ## Git / GitHub
 

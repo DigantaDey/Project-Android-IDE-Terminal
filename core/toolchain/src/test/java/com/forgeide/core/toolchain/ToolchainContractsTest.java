@@ -58,4 +58,59 @@ public class ToolchainContractsTest {
             assertTrue(expected.getMessage().contains("No isolated toolchain"));
         }
     }
+
+    @Test
+    public void configuredProviderMustReallySupportTheFileLanguage() {
+        Toolchain provider = new Toolchain() {
+            public String id() {
+                return "javascript";
+            }
+
+            public String displayName() {
+                return "Fixture JS";
+            }
+
+            public java.util.Set<String> languages() {
+                return java.util.Set.of("javascript");
+            }
+
+            public java.util.Set<com.forgeide.core.sandbox.SandboxPolicy.Restriction> restrictions() {
+                return com.forgeide.core.sandbox.SandboxPolicy.safeDefault().required;
+            }
+
+            public boolean available() {
+                return true;
+            }
+
+            public String availabilityMessage() {
+                return "Installed fixture";
+            }
+
+            public java.util.concurrent.CompletableFuture<Integer> run(
+                String source,
+                RunConfiguration config,
+                com.forgeide.core.sandbox.SandboxPolicy policy,
+                com.forgeide.core.util.CancellationToken cancel,
+                java.util.function.Consumer<String> out,
+                java.util.function.Consumer<String> errors
+            ) {
+                throw new UnsupportedOperationException();
+            }
+        };
+        ToolchainRegistry registry = new ToolchainRegistry();
+        registry.register(provider);
+        assertSame(provider, registry.requireForLanguage("javascript", "javascript"));
+        try {
+            registry.requireForLanguage("javascript", "sql");
+            fail();
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("does not support sql"));
+        }
+        try {
+            registry.requireForLanguage("python", "python");
+            fail();
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("No isolated toolchain"));
+        }
+    }
 }

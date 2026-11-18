@@ -64,4 +64,31 @@ public class TerminalTest {
         restored.restore(json);
         assertEquals(t.output(), restored.output());
     }
+
+    @Test
+    public void ideMutationGuardProtectsOpenBuffersFromShellChanges() throws Exception {
+        Workspace workspace = new Workspace(tmp.newFolder().toPath());
+        workspace.write("src/open.js", "unsaved buffer owns this path");
+        workspace.write("other.js", "other");
+        TerminalSession terminal = new TerminalSession("guard", workspace);
+        terminal.protectMutations(path -> {
+            if (path.equals("src") || path.equals("src/open.js")) throw new java.io.IOException(
+                "Close affected editor tabs"
+            );
+        });
+        CancellationToken cancel = new CancellationToken();
+        for (String command : java.util.List.of(
+            "rm src/open.js",
+            "mv src moved",
+            "mv other.js src/open.js",
+            "cp other.js src/open.js"
+        )) {
+            TerminalSession.Result result = terminal.execute(command, cancel);
+            assertEquals(command, 1, result.exitCode);
+            assertTrue(result.stderr.contains("Close affected editor tabs"));
+        }
+        assertEquals("unsaved buffer owns this path", workspace.read("src/open.js"));
+        assertEquals("other", workspace.read("other.js"));
+        assertEquals(0, terminal.execute("cp other.js copy.js", cancel).exitCode);
+    }
 }

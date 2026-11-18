@@ -162,4 +162,90 @@ public class WorkspaceTest {
             fail();
         } catch (IOException expected) {}
     }
+
+    @Test
+    public void boundedStreamImportIsPublishedOnlyOnSuccess() throws Exception {
+        Workspace workspace = ws();
+        byte[] bytes = "hello".getBytes(StandardCharsets.UTF_8);
+        assertEquals(5, workspace.importFile("src/import.txt", new ByteArrayInputStream(bytes), 5));
+        assertEquals("hello", workspace.read("src/import.txt"));
+        try {
+            workspace.importFile("too-big.txt", new ByteArrayInputStream(bytes), 4);
+            fail();
+        } catch (IOException expected) {}
+        assertFalse(Files.exists(workspace.resolve("too-big.txt")));
+        assertEquals(java.util.List.of("src"), workspace.list(""));
+    }
+
+    @Test
+    public void failedImportCannotDeleteAnExistingDestination() throws Exception {
+        Workspace workspace = ws();
+        workspace.write("original.txt", "precious");
+        try {
+            workspace.importFile("original.txt", new ByteArrayInputStream(new byte[] { 1 }), 1);
+            fail();
+        } catch (FileAlreadyExistsException expected) {}
+        assertEquals("precious", workspace.read("original.txt"));
+    }
+
+    @Test
+    public void providerFailureLeavesNoPartialFileOrTemporaryArtifact() throws Exception {
+        Workspace workspace = ws();
+        InputStream broken = new InputStream() {
+            int read;
+
+            @Override
+            public int read() throws IOException {
+                if (read++ == 0) return 65;
+                throw new IOException("Provider disconnected");
+            }
+        };
+        try {
+            workspace.importFile("new.txt", broken, 100);
+            fail();
+        } catch (IOException expected) {}
+        try (java.util.stream.Stream<Path> files = Files.list(workspace.root())) {
+            assertEquals(0, files.count());
+        }
+    }
+
+    @Test
+    public void destinationCreatedDuringImportIsNeverOverwritten() throws Exception {
+        Workspace workspace = ws();
+        InputStream racing = new InputStream() {
+            @Override
+            public int read() throws IOException {
+                workspace.write("late.txt", "preserve");
+                return -1;
+            }
+        };
+        try {
+            workspace.importFile("late.txt", racing, 100);
+            fail();
+        } catch (FileAlreadyExistsException expected) {}
+        assertEquals("preserve", workspace.read("late.txt"));
+        assertEquals(1, workspace.list("").size());
+    }
+
+    @Test
+    public void externalOversizedSaveConflictIsRejectedBeforeReadingTheWholeFile() throws Exception {
+        Workspace workspace = ws();
+        try (
+            java.nio.channels.SeekableByteChannel file = Files.newByteChannel(
+                workspace.resolve("grown.txt"),
+                StandardOpenOption.WRITE,
+                StandardOpenOption.CREATE_NEW
+            )
+        ) {
+            file.position(Workspace.MAX_TEXT_BYTES);
+            file.write(java.nio.ByteBuffer.wrap(new byte[] { 1 }));
+        }
+        try {
+            workspace.writeChecked("grown.txt", "unsaved", "old-digest");
+            fail();
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("size limit"));
+        }
+        assertEquals(Workspace.MAX_TEXT_BYTES + 1, Files.size(workspace.resolve("grown.txt")));
+    }
 }

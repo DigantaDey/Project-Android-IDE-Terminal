@@ -7,6 +7,7 @@ import com.forgeide.core.debug.*;
 import com.forgeide.core.editor.LineEndings;
 import com.forgeide.core.project.*;
 import com.forgeide.core.recovery.*;
+import com.forgeide.core.sandbox.SandboxPolicy;
 import com.forgeide.core.settings.*;
 import com.forgeide.core.toolchain.*;
 import com.forgeide.core.util.*;
@@ -33,6 +34,20 @@ public final class ForgeApplication extends Application {
 
     public boolean isRunning() {
         return activeRun != null && !activeRun.isDone();
+    }
+
+    /** Debugging and ordinary execution must obey the same effective global/project ceilings. */
+    public SandboxPolicy executionPolicy() {
+        Set<SandboxPolicy.Restriction> required = EnumSet.copyOf(SandboxPolicy.safeDefault().required);
+        if (settings.bool("requireHardLimits")) {
+            required.add(SandboxPolicy.Restriction.HARD_MEMORY_LIMIT);
+            required.add(SandboxPolicy.Restriction.CPU_QUOTA);
+        }
+        return new SandboxPolicy(
+            settings.integer("executionSeconds") * 1000L,
+            settings.integer("outputKiB") * 1024,
+            required
+        );
     }
 
     public final List<OpenDocument> documents = new CopyOnWriteArrayList<>();
@@ -211,10 +226,14 @@ public final class ForgeApplication extends Application {
             log("Some previous tabs could not be restored: " + e.getMessage());
         }
         try {
-            for (RecoveryStore.Entry e : recovery.recover())
+            for (RecoveryStore.Entry e : recovery.recover(name, 20, this::log))
                 if (e.project.equals(name)) {
                     OpenDocument doc = find(e.path);
                     if (doc == null) {
+                        if (documents.size() >= 20) {
+                            log("Recovery retained on disk (20-tab limit): " + e.path);
+                            continue;
+                        }
                         doc = new OpenDocument(workspace, name, e.path, e.text, e.diskDigest);
                         documents.add(doc);
                     } else doc.content.replace(0, doc.content.length(), e.text);
@@ -261,6 +280,40 @@ public final class ForgeApplication extends Application {
         documents.add(d);
         activePath = path;
         return d;
+    }
+
+    /** Run on the storage executor so renames, journals and editor ownership stay ordered. */
+    public String moveItem(String from, String to) throws IOException {
+        Workspace owner = workspace;
+        String source = owner.relative(owner.resolve(from)),
+            destination = owner.relative(owner.resolve(to));
+        if (source.equals(destination)) return destination;
+        // Preserve in-flight edits before touching the filesystem. A failed move keeps the old journal.
+        for (OpenDocument d : documents)
+            if (d.path.equals(source) || d.path.startsWith(source + "/")) journal(d);
+        owner.move(source, destination);
+        for (OpenDocument d : documents) {
+            if (!d.path.equals(source) && !d.path.startsWith(source + "/")) continue;
+            String old = d.path;
+            d.path = destination + old.substring(source.length());
+            try {
+                journal(d);
+                recovery.discard(d.project, old);
+            } catch (IOException error) {
+                // Never discard the old recovery copy if creating the relocated copy failed.
+                log("RECOVERY WARNING after rename; original journal retained: " + error.getMessage());
+            }
+        }
+        if (activePath.equals(source) || activePath.startsWith(source + "/")) activePath =
+            destination + activePath.substring(source.length());
+        breakpoints.relocate(source, destination);
+        try {
+            persistSession();
+        } catch (IOException error) {
+            log("Session persistence after rename: " + error.getMessage());
+        }
+        changed();
+        return destination;
     }
 
     public void persistSession() throws IOException {
@@ -310,7 +363,7 @@ public final class ForgeApplication extends Application {
 
         public final Workspace owner;
         public final String project;
-        public String path;
+        public volatile String path;
         public final Content content;
         public final LineEndings lineEndings;
         public final AtomicLong revision = new AtomicLong();

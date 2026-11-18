@@ -197,6 +197,7 @@ public final class ScriptDebugger implements Debugger {
                     }
                     stepDepth = stack.size();
                     if (List.of("into", "over", "out").contains(command)) step = command;
+                    events.accept(Json.write(Map.of("event", "continued")));
                     break;
                 }
             }

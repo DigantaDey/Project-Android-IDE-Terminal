@@ -37,9 +37,18 @@ public final class SandboxDeviceTest {
     @Test
     public void runtimeHasDifferentUidAndNoNetworkPermission() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        com.forgeide.core.util.AtomicFiles.write(
-            new java.io.File(context.getFilesDir(), "state/isolation-witness.txt").toPath(),
-            "host-private-fixture"
+        java.io.File witness = new java.io.File(context.getFilesDir(), "state/isolation-witness.txt");
+        assertEquals(
+            new java.io.File(
+                new java.io.File(context.getApplicationInfo().dataDir, "files"),
+                "state/isolation-witness.txt"
+            ).getCanonicalFile(),
+            witness.getCanonicalFile()
+        );
+        com.forgeide.core.util.AtomicFiles.write(witness.toPath(), "host-private-fixture");
+        assertTrue(
+            "The witness must exist and be readable by the host before testing denial",
+            witness.isFile() && witness.canRead()
         );
         ExecutionClient client = new ExecutionClient(context);
         AtomicReference<CompletableFuture<Integer>> completion = new AtomicReference<>();
@@ -72,6 +81,7 @@ public final class SandboxDeviceTest {
         assertTrue(ready.getBoolean("isolated", false));
         assertFalse(ready.getBoolean("networkPermission", true));
         assertTrue("Kernel must deny socket creation", ready.getBoolean("networkSocketDenied", false));
+        java.nio.file.Files.deleteIfExists(witness.toPath());
     }
 
     @Test
@@ -296,6 +306,68 @@ public final class SandboxDeviceTest {
         assertTrue(client.running());
         current.cancel();
         assertEquals(Integer.valueOf(130), second.get().get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void debuggerReallyStepsEvaluatesAndContinuesAcrossBinder() throws Exception {
+        ExecutionClient client = new ExecutionClient(
+            InstrumentationRegistry.getInstrumentation().getTargetContext()
+        );
+        AtomicReference<CompletableFuture<Integer>> result = new AtomicReference<>();
+        BlockingQueue<JsonObject> stops = new LinkedBlockingQueue<>(),
+            evaluations = new LinkedBlockingQueue<>();
+        java.util.concurrent.atomic.AtomicInteger continued = new java.util.concurrent.atomic.AtomicInteger();
+        StringBuffer output = new StringBuffer();
+        try {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+                result.set(
+                    client.run(
+                        "var counter = 1;\ncounter += 41;\nprint(counter);",
+                        config(),
+                        SandboxPolicy.safeDefault(),
+                        List.of(),
+                        true,
+                        output::append,
+                        output::append,
+                        json -> {
+                            JsonObject event = JsonObject.parse(json);
+                            switch (event.getString("event", "")) {
+                                case "stopped":
+                                    stops.add(event);
+                                    break;
+                                case "evaluation":
+                                    evaluations.add(event);
+                                    break;
+                                case "continued":
+                                    continued.incrementAndGet();
+                                    break;
+                            }
+                        }
+                    )
+                )
+            );
+            JsonObject initial = stops.poll(10, TimeUnit.SECONDS);
+            assertNotNull("Must pause in the real interpreter", initial);
+            assertFalse(initial.getArray("stack").isEmpty());
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> client.control("over", ""));
+            JsonObject stepped = stops.poll(5, TimeUnit.SECONDS);
+            assertNotNull("Step over must reach the next source line", stepped);
+            JsonObject frame = new JsonObject((Map<String, Object>) stepped.getArray("stack").get(0));
+            assertEquals("test.js", frame.getString("file", ""));
+            assertEquals(2, frame.getInt("line", 0));
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+                client.control("evaluate", "counter + 41")
+            );
+            JsonObject watch = evaluations.poll(5, TimeUnit.SECONDS);
+            assertNotNull("Watch must evaluate in the paused scope", watch);
+            assertEquals("42", watch.getString("value", ""));
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> client.control("continue", ""));
+            assertEquals(output.toString(), Integer.valueOf(0), result.get().get(10, TimeUnit.SECONDS));
+            assertTrue(output.toString(), output.toString().contains("42"));
+            assertTrue("Resume state must be reported, not left as paused", continued.get() >= 2);
+        } finally {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(client::cancel);
+        }
     }
 
     @Test

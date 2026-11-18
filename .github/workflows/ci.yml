@@ -74,6 +74,8 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          FORGE_VISUAL_REPORT: ${{ github.event.inputs.visual_report == 'true' || contains(github.event.head_commit.message, '[visual-qa]') }}
         with:
           api-level: 29
           arch: x86_64
@@ -95,3 +97,4 @@ jobs:
             app/build/outputs/androidTest-results/
             app/build/reports/device-screenshots/
             app/build/reports/device-logcat.txt
+            app/build/reports/device-visual.log

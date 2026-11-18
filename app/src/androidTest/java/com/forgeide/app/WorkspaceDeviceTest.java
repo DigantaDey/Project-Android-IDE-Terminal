@@ -165,10 +165,155 @@ public final class WorkspaceDeviceTest {
     }
 
     @Test
+    public void folderRenamePreservesDirtyBuffersRecoveryAndBreakpoints() throws Exception {
+        AtomicReference<ForgeApplication> state = new AtomicReference<>();
+        activity.getScenario().onActivity(a -> state.set((ForgeApplication) a.getApplication()));
+        ForgeApplication app = state.get();
+        String source = "rename-fixture-" + java.util.UUID.randomUUID(),
+            destination = source + "-moved";
+        String originalActive = app.activePath;
+        ForgeApplication.OpenDocument doc = app.io
+            .submit(() -> {
+                app.workspace.write(source + "/main.js", "print('fixture');\n");
+                return app.open(source + "/main.js");
+            })
+            .get(10, TimeUnit.SECONDS);
+        try {
+            activity
+                .getScenario()
+                .onActivity(a -> {
+                    doc.content.insert(0, 0, "// edits during rename\n");
+                    app.breakpoints.condition(doc.path, 1, "count > 0");
+                });
+            app.io
+                .submit(() -> {
+                    app.journal(doc);
+                    app.moveItem(source, destination);
+                    return null;
+                })
+                .get(10, TimeUnit.SECONDS);
+            assertEquals(destination + "/main.js", doc.path);
+            assertEquals(doc.path, app.activePath);
+            assertTrue(doc.dirty());
+            assertTrue(doc.content.toString().startsWith("// edits during rename"));
+            assertFalse(Files.exists(app.workspace.resolve(source)));
+            assertEquals("print('fixture');\n", app.workspace.read(doc.path));
+            assertTrue(
+                app.breakpoints
+                    .all()
+                    .stream()
+                    .anyMatch(p -> p.file.equals(doc.path) && p.condition.equals("count > 0"))
+            );
+            java.util.List<com.forgeide.core.recovery.RecoveryStore.Entry> recovered = app.recovery.recover(
+                app.project,
+                20,
+                app::log
+            );
+            assertTrue(
+                recovered
+                    .stream()
+                    .anyMatch(e -> e.path.equals(doc.path) && e.text.startsWith("// edits during rename"))
+            );
+            assertFalse(recovered.stream().anyMatch(e -> e.path.startsWith(source + "/")));
+            app.io
+                .submit(() -> {
+                    app.save(doc);
+                    return null;
+                })
+                .get(10, TimeUnit.SECONDS);
+            assertFalse(doc.dirty());
+            assertTrue(app.workspace.read(doc.path).startsWith("// edits during rename"));
+        } finally {
+            activity
+                .getScenario()
+                .onActivity(a -> {
+                    doc.detach();
+                    app.documents.remove(doc);
+                    app.activePath = originalActive;
+                    for (com.forgeide.core.debug.Breakpoints.Point point : app.breakpoints.all()) {
+                        if (
+                            point.file.startsWith(source + "/") || point.file.startsWith(destination + "/")
+                        ) app.breakpoints.toggle(point.file, point.line);
+                    }
+                });
+            app.io
+                .submit(() -> {
+                    app.recovery.discard(doc.project, source + "/main.js");
+                    app.recovery.discard(doc.project, destination + "/main.js");
+                    if (Files.exists(app.workspace.resolve(source))) app.workspace.delete(source);
+                    if (Files.exists(app.workspace.resolve(destination))) app.workspace.delete(destination);
+                    app.persistSession();
+                    return null;
+                })
+                .get(10, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    public void shellCannotRemoveTheBackingFileOfAnOpenEditor() throws Exception {
+        AtomicReference<ForgeApplication> state = new AtomicReference<>();
+        activity.getScenario().onActivity(a -> state.set((ForgeApplication) a.getApplication()));
+        ForgeApplication app = state.get();
+        String path = app.activePath;
+        String disk = app.workspace.read(path);
+        com.forgeide.core.terminal.TerminalSession terminal = app.terminalSessions.get(app.project).get(0);
+        com.forgeide.core.terminal.TerminalSession.Result result = app.io
+            .submit(() ->
+                terminal.execute(
+                    "rm '" + path.replace("'", "'\\''") + "'",
+                    new com.forgeide.core.util.CancellationToken()
+                )
+            )
+            .get(10, TimeUnit.SECONDS);
+        assertEquals(1, result.exitCode);
+        assertTrue(result.stderr, result.stderr.contains("Close affected editor tabs"));
+        assertEquals(disk, app.workspace.read(path));
+    }
+
+    @Test
+    public void executionAndDebugShareTheConfiguredPolicyCeilings() {
+        activity
+            .getScenario()
+            .onActivity(a -> {
+                ForgeApplication app = (ForgeApplication) a.getApplication();
+                com.forgeide.core.sandbox.SandboxPolicy policy = app.executionPolicy();
+                assertEquals(app.settings.integer("executionSeconds") * 1000L, policy.timeoutMillis);
+                assertEquals(app.settings.integer("outputKiB") * 1024, policy.outputBytes);
+                assertEquals(
+                    app.settings.bool("requireHardLimits"),
+                    policy.required.contains(
+                        com.forgeide.core.sandbox.SandboxPolicy.Restriction.HARD_MEMORY_LIMIT
+                    )
+                );
+                assertEquals(
+                    app.settings.bool("requireHardLimits"),
+                    policy.required.contains(com.forgeide.core.sandbox.SandboxPolicy.Restriction.CPU_QUOTA)
+                );
+                assertTrue(
+                    policy.required.containsAll(
+                        com.forgeide.core.sandbox.SandboxPolicy.safeDefault().required
+                    )
+                );
+            });
+    }
+
+    @Test
     public void captureNativeWorkspaceScreenshot() throws Exception {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         Bitmap bitmap = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         assertNotNull(bitmap);
+        // Test-only shell capture survives the connected-test runner uninstalling the fixture app.
+        // No shell API or permission is present in the production app or available to executed code.
+        try (
+            InputStream shell = new android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                InstrumentationRegistry.getInstrumentation()
+                    .getUiAutomation()
+                    .executeShellCommand("screencap -p /data/local/tmp/forge-workspace.png")
+            )
+        ) {
+            byte[] drain = new byte[1024];
+            while (shell.read(drain) != -1) {}
+        }
         File dir = new File(
             InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir(null),
             "test-screenshots"
@@ -185,6 +330,24 @@ public final class WorkspaceDeviceTest {
         );
         try (OutputStream output = new FileOutputStream(new File(dir, "workspace-preview.jpg"))) {
             assertTrue(thumbnail.compress(Bitmap.CompressFormat.JPEG, 72, output));
+        }
+        // Only opt in on disposable fixture installations. The app itself never logs screenshots.
+        if ("true".equals(InstrumentationRegistry.getArguments().getString("visualReport"))) {
+            String encoded = android.util.Base64.encodeToString(
+                Files.readAllBytes(new File(dir, "workspace-preview.jpg").toPath()),
+                android.util.Base64.NO_WRAP
+            );
+            int chunk = 2800,
+                count = (encoded.length() + chunk - 1) / chunk;
+            for (int i = 0; i < count; i++) android.util.Log.i(
+                "ForgeVisual",
+                "FORGE_VISUAL " +
+                    i +
+                    "/" +
+                    count +
+                    " " +
+                    encoded.substring(i * chunk, Math.min(encoded.length(), (i + 1) * chunk))
+            );
         }
         thumbnail.recycle();
         bitmap.recycle();
