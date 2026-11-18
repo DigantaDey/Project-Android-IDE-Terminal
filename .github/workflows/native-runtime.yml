@@ -1,0 +1,17 @@
+name: Offline native runtime packaging
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lock:
+    name: Verify native package catalog
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Resolve signed upstream package metadata
+        run: python3 scripts/native-bundle.py lock
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: native-package-lock-candidate
+          path: build/native/runtime-lock.json
