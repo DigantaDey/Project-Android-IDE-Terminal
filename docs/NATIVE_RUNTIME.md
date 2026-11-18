@@ -23,6 +23,17 @@ or broad storage permission is used.
    commands, and npm. Ctrl-C interrupts the foreground job. Resize and keyboard
    input are forwarded to the companion PTY, not to an IDE-owned process.
 
+### Updating debug builds
+
+Both APKs must be signed together. Different CI debug runs may use different
+debug signing keys, so Android can refuse an in-place update or reject a mixed
+pair. **Export and verify backups of important projects before uninstalling an
+older development build.** Uninstalling the IDE removes its private projects,
+recovery journals and device-bound credentials. Do not uninstall a broken
+installation as a recovery step before preserving its data. Locally built updates
+can retain a developer's existing signing key; production release signing is a
+separate distributor responsibility.
+
 Turning a switch off stops the native session and blocks future Forge launches.
 It removes that tool family from normal PTY command discovery and blocks Forge's
 entry point. It does **not** shrink an installed APK, revoke absolute-path access
