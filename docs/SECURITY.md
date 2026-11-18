@@ -24,7 +24,7 @@ The interpreter deadline, service main-thread watchdog, and host deadline are in
 ### Resource limits
 
 - Execution source: 512 KiB; launch parcel: 128 KiB; at most 1,000 selected breakpoints.
-- Time: bounded to 100–60,000 ms at the service boundary; normal settings default to 10 seconds. Debug pauses consume their deadline.
+- Time: bounded to 100–60,000 ms at the service boundary; normal settings default to 10 seconds. Debug pauses consume their deadline. Debug and ordinary execution share the same effective global/project ceilings; a debug launch cannot raise them.
 - Output: bounded per run; default 256 KiB, configurable in the UI within supported limits.
 - SQL query display: at most 1,000 rows and bounded cell text.
 - Project editor: strict UTF-8, no NUL/binary content, at most 8 MiB per editable file; analysis disabled above 512 KiB.
@@ -52,11 +52,11 @@ Imported metadata is not a permission grant. Private-repository authentication a
 
 ## Storage, save, and recovery
 
-A workspace rejects absolute paths, traversal outside its root, NUL/backslash paths, and symlink components. Active project files live in app-private storage. SAF import copies selected content into that storage rather than granting executed code a document-tree URI.
+A workspace rejects absolute paths, traversal outside its root, NUL/backslash paths, and symlink components. Active project files live in app-private storage. SAF import copies selected content into that storage rather than granting executed code a document-tree URI. Individual streams are bounded and staged before publication; an interrupted provider or destination conflict cannot delete/truncate the previous destination. Project shell mutations reject paths owned by open editor buffers.
 
 Writes use same-directory temporary files, file fsync, and atomic rename where supported. Saves verify the last known disk digest and retain a checksummed recovery copy before replacing a file. If a file changed, save refuses; no silent overwrite is performed. Dirty state is revision-based to prevent stale background completions marking newer edits clean. Filesystem/OEM power-loss guarantees vary; this is not a guarantee against hardware corruption.
 
-Recovery is outside project storage. The 600 ms debounce, storage errors, force-stop, abrupt power loss, uninstall, and Android background limits mean the last unflushed edits can still be lost. Keep portable backups. App backup is disabled to avoid accidentally syncing credential/state data.
+Recovery is outside project storage. Renames relocate open-buffer journals and breakpoint paths; the old journal is retained if writing its relocated copy fails. Recovery reports and retains damaged journals instead of letting one corrupt entry block healthy entries. Project-filtered recovery bounds the in-memory result set and reports retained overflow. The 600 ms debounce, storage errors, force-stop, abrupt power loss, uninstall, and Android background limits mean the last unflushed edits can still be lost. Keep portable backups. App backup is disabled to avoid accidentally syncing credential/state data.
 
 Trash metadata and contents use separate, generated entry directories; restore cannot overwrite an existing destination. ZIP export excludes Git, trash, dependency/generated trees, and replace-backups. Export/share grants only the selected output URI through `FileProvider`/SAF. Imported projects are not automatically synced to their original external location.
 

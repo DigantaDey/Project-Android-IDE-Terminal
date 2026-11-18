@@ -98,6 +98,9 @@ public final class Workspace {
     public synchronized void writeChecked(String path, String text, String expectedDigest)
         throws IOException {
         Path p = resolve(path);
+        if (Files.exists(p) && Files.size(p) > MAX_TEXT_BYTES) throw new IOException(
+            "File changed on disk beyond the editable size limit. Your recovery copy is safe."
+        );
         String actual = Files.exists(p) ? AtomicFiles.sha256(Files.readAllBytes(p)) : "";
         if (expectedDigest != null && !actual.equals(expectedDigest)) throw new IOException(
             "File changed on disk. Your recovery copy is safe; reload or save a copy."
@@ -105,17 +108,47 @@ public final class Workspace {
         write(path, text);
     }
 
-    public void mkdir(String path) throws IOException {
+    /** Stage a bounded provider stream; failures never truncate/delete an existing destination. */
+    public synchronized long importFile(String path, InputStream input, long limit) throws IOException {
+        if (input == null) throw new IOException("No document stream");
+        if (limit < 0) throw new IOException("Import exceeds storage limit");
+        Path destination = resolve(path);
+        if (destination.equals(root) || Files.exists(destination)) throw new FileAlreadyExistsException(path);
+        Files.createDirectories(destination.getParent());
+        Path stage = Files.createTempFile(destination.getParent(), ".forge-save-import-", ".tmp");
+        long total = 0;
+        try {
+            try (FileOutputStream output = new FileOutputStream(stage.toFile())) {
+                byte[] buffer = new byte[16384];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException(
+                        "Import interrupted"
+                    );
+                    if (count > limit - total) throw new IOException("Import exceeds storage limit");
+                    output.write(buffer, 0, count);
+                    total += count;
+                }
+                output.getFD().sync();
+            }
+            Files.move(stage, destination);
+            return total;
+        } finally {
+            Files.deleteIfExists(stage);
+        }
+    }
+
+    public synchronized void mkdir(String path) throws IOException {
         Files.createDirectories(resolve(path));
     }
 
-    public void create(String path) throws IOException {
+    public synchronized void create(String path) throws IOException {
         Path p = resolve(path);
         Files.createDirectories(p.getParent());
         Files.createFile(p);
     }
 
-    public void move(String from, String to) throws IOException {
+    public synchronized void move(String from, String to) throws IOException {
         Path a = resolve(from),
             b = resolve(to);
         if (a.equals(root) || b.equals(root)) throw new IOException("Cannot move project root");
@@ -182,7 +215,7 @@ public final class Workspace {
     }
 
     /** Destructive operations are explicit; the Android UI moves files to .forge-trash first. */
-    public void delete(String path) throws IOException {
+    public synchronized void delete(String path) throws IOException {
         Path p = resolve(path);
         if (p.equals(root)) throw new IOException("Cannot delete project root");
         Files.walkFileTree(

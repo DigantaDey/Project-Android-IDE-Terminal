@@ -23,6 +23,10 @@ public final class TerminalSession {
         ) throws Exception;
     }
 
+    public interface MutationGuard {
+        void check(String projectRelativePath) throws IOException;
+    }
+
     public static final class Result {
 
         public final String stdout, stderr;
@@ -46,6 +50,7 @@ public final class TerminalSession {
     private final List<String> history = new ArrayList<>();
     private final StringBuilder output = new StringBuilder();
     private final Map<String, External> providers = new HashMap<>();
+    private MutationGuard mutationGuard = path -> {};
 
     public TerminalSession(String id, Workspace workspace) {
         this.id = id;
@@ -57,6 +62,11 @@ public final class TerminalSession {
 
     public synchronized void register(String command, External provider) {
         providers.put(command, provider);
+    }
+
+    /** The IDE can protect open buffers; a shell command must not move/delete their backing files. */
+    public synchronized void protectMutations(MutationGuard guard) {
+        mutationGuard = Objects.requireNonNull(guard);
     }
 
     public synchronized String cwd() {
@@ -153,25 +163,40 @@ public final class TerminalSession {
                     args(a, 1);
                     {
                         String p = path(a.get(1));
-                        if (!Files.exists(workspace.resolve(p))) workspace.create(p);
+                        if (!Files.exists(workspace.resolve(p))) {
+                            mutationGuard.check(p);
+                            workspace.create(p);
+                        }
                         return Result.ok("");
                     }
-                case "mkdir":
+                case "mkdir": {
                     args(a, 1);
-                    workspace.mkdir(path(a.get(a.size() - 1)));
+                    String destination = path(a.get(a.size() - 1));
+                    mutationGuard.check(destination);
+                    workspace.mkdir(destination);
                     return Result.ok("");
-                case "cp":
+                }
+                case "cp": {
                     args(a, 2);
-                    workspace.duplicate(path(a.get(1)), path(a.get(2)));
+                    String destination = path(a.get(2));
+                    mutationGuard.check(destination);
+                    workspace.duplicate(path(a.get(1)), destination);
                     return Result.ok("");
-                case "mv":
+                }
+                case "mv": {
                     args(a, 2);
-                    workspace.move(path(a.get(1)), path(a.get(2)));
+                    String source = path(a.get(1)),
+                        destination = path(a.get(2));
+                    mutationGuard.check(source);
+                    mutationGuard.check(destination);
+                    workspace.move(source, destination);
                     return Result.ok("");
+                }
                 case "rm":
                     args(a, 1);
                     {
                         String p = path(a.get(1));
+                        mutationGuard.check(p);
                         if (workspace.isDirectory(p)) throw new IOException(
                             "Use the explorer's recoverable delete for directories"
                         );

@@ -27,4 +27,13 @@ public final class ToolchainRegistry {
         );
         return p;
     }
+
+    /** A configured provider must really support the selected file; never silently substitute one. */
+    public synchronized Toolchain requireForLanguage(String id, String language) {
+        Toolchain provider = require(id);
+        if (!provider.languages().contains(language)) throw new IllegalArgumentException(
+            "Toolchain " + id + " does not support " + language
+        );
+        return provider;
+    }
 }

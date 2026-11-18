@@ -36,6 +36,19 @@ public final class Breakpoints {
         points.add(new Point(file, line, value));
     }
 
+    /** Preserve conditions and line locations when a file or an entire folder is renamed. */
+    public synchronized void relocate(String from, String to) {
+        for (int i = 0; i < points.size(); i++) {
+            Point point = points.get(i);
+            if (point.file.equals(from) || point.file.startsWith(from + "/")) {
+                points.set(
+                    i,
+                    new Point(to + point.file.substring(from.length()), point.line, point.condition)
+                );
+            }
+        }
+    }
+
     public synchronized List<Point> all() {
         return new ArrayList<>(points);
     }

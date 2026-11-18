@@ -70,7 +70,9 @@ public final class MainActivity extends Activity {
     private boolean wide,
         sidebarVisible,
         panelVisible = true,
-        destroyed;
+        destroyed,
+        wasRunning;
+    private String lastDebugState = "";
     private String panelName = "Terminal",
         lastTerminalProject = "";
     private int terminalIndex;
@@ -117,6 +119,7 @@ public final class MainActivity extends Activity {
         sidebarVisible = saved == null ? wide : saved.getBoolean("sidebar", wide);
         makeLayout();
         registerCommands();
+        problems.addAll(BuildLog.diagnostics(app.output.toString()));
         app.observers.add(observer);
         refreshTree();
         rebuildTabs();
@@ -611,6 +614,14 @@ public final class MainActivity extends Activity {
 
     private void refreshState() {
         if (destroyed || status == null) return;
+        boolean running = app.isRunning();
+        if (wasRunning && !running) {
+            problems.removeIf(problem -> problem.source.equals("compiler"));
+            problems.addAll(BuildLog.diagnostics(app.output.toString()));
+            applyDiagnostics();
+        }
+        wasRunning = running;
+        presentDebugState();
         refreshStatus();
         for (int i = 0; i < app.documents.size() && i < tabs.getChildCount(); i++) {
             ForgeApplication.OpenDocument d = app.documents.get(i);
@@ -623,6 +634,23 @@ public final class MainActivity extends Activity {
             terminalText != null && visibleTerminal != null && panelName.equals("Terminal")
         ) terminalText.setText(visibleTerminal.output());
         if (debugText != null && panelName.equals("Debugger")) debugText.setText(debugDescription());
+    }
+
+    private void presentDebugState() {
+        String json = app.debugState;
+        if (json.equals(lastDebugState)) return;
+        lastDebugState = json;
+        if (json.isEmpty()) return;
+        try {
+            JsonObject event = JsonObject.parse(json);
+            if (event.getString("event", "").equals("stopped") && !event.getArray("stack").isEmpty()) {
+                JsonObject frame = new JsonObject((Map<String, Object>) event.getArray("stack").get(0));
+                goTo(frame.getString("file", app.activePath), frame.getInt("line", 1) - 1, 0);
+                showPanel("Debugger");
+            }
+        } catch (RuntimeException error) {
+            app.log("Debugger event: " + error.getMessage());
+        }
     }
 
     private void refreshStatus() {
@@ -870,18 +898,7 @@ public final class MainActivity extends Activity {
                         break;
                     case 1:
                         input("New project-relative path", path, next ->
-                            fileChange(
-                                () -> {
-                                    app.workspace.move(path, next);
-                                    return next;
-                                },
-                                p -> {
-                                    for (ForgeApplication.OpenDocument d : app.documents)
-                                        if (d.path.equals(path)) d.path = p;
-                                    refreshTree();
-                                    rebuildTabs();
-                                }
-                            )
+                            fileChange(() -> app.moveItem(path, next), p -> refreshAfterRename())
                         );
                         break;
                     case 2:
@@ -1021,25 +1038,55 @@ public final class MainActivity extends Activity {
             i -> {
                 if (i == 0) newItem(path);
                 else if (i == 2) trashItem(path);
-                else input("New project-relative folder path", path, next ->
+                else if (i == 3) input("Copy folder to", path + ".copy", next ->
                     fileChange(
                         () -> {
-                            app.workspace.move(path, next);
+                            app.workspace.duplicate(path, next);
                             return next;
                         },
+                        result -> refreshTree()
+                    )
+                );
+                else input("New project-relative folder path", path, next ->
+                    fileChange(
+                        () -> app.moveItem(path, next),
                         result -> {
-                            for (ForgeApplication.OpenDocument doc : app.documents)
-                                if (doc.path.startsWith(path + "/")) doc.path =
-                                    result + doc.path.substring(path.length());
-                            expanded.remove(path);
+                            for (String entry : new HashSet<>(expanded)) {
+                                if (entry.equals(path) || entry.startsWith(path + "/")) {
+                                    expanded.remove(entry);
+                                    expanded.add(result + entry.substring(path.length()));
+                                }
+                            }
                             expanded.add(result);
-                            rebuildTabs();
-                            refreshTree();
+                            refreshAfterRename();
                         }
                     )
                 );
             }
         );
+    }
+
+    private void refreshAfterRename() {
+        // A new extension can change the language without replacing Content or its undo history.
+        if (primaryDoc != null) primary.setEditorLanguage(
+            new IdeLanguage(
+                languages,
+                languages.forFile(primaryDoc.path),
+                app.settings.integer("tabSize"),
+                app.settings.bool("useTabs")
+            )
+        );
+        if (secondaryDoc != null) secondary.setEditorLanguage(
+            new IdeLanguage(
+                languages,
+                languages.forFile(secondaryDoc.path),
+                app.settings.integer("tabSize"),
+                app.settings.bool("useTabs")
+            )
+        );
+        rebuildTabs();
+        refreshStatus();
+        refreshTree();
     }
 
     private void projectMenu() {
@@ -1207,22 +1254,21 @@ public final class MainActivity extends Activity {
                 v -> toast("Export complete")
             );
         } else if (request == OPEN_FILE) {
+            Workspace owner = app.workspace;
             input("Import file as", displayName(uri, "imported.txt"), name ->
                 background(
                     "Importing file…",
                     () -> {
-                        Path p = app.workspace.resolve(name);
-                        if (Files.exists(p)) throw new IOException(
-                            "File already exists; choose a different name"
-                        );
                         try (InputStream in = getContentResolver().openInputStream(uri)) {
-                            copyBounded(in, p, Workspace.MAX_TEXT_BYTES);
+                            owner.importFile(name, in, Workspace.MAX_TEXT_BYTES);
                         }
                         return name;
                     },
                     p -> {
-                        refreshTree();
-                        open(p);
+                        if (app.workspace == owner) {
+                            refreshTree();
+                            open(p);
+                        } else toast("Imported into the original project");
                     }
                 )
             );
@@ -1320,34 +1366,11 @@ public final class MainActivity extends Activity {
                             android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, childId)
                         )
                     ) {
-                        budget[1] += copyBounded(
-                            in,
-                            target.resolve(path),
-                            ProjectArchive.MAX_BYTES - budget[1]
-                        );
+                        budget[1] += target.importFile(path, in, ProjectArchive.MAX_BYTES - budget[1]);
                     }
                 }
             }
         }
-    }
-
-    private long copyBounded(InputStream in, Path path, long limit) throws IOException {
-        if (in == null) throw new IOException("No document stream");
-        Files.createDirectories(path.getParent());
-        long total = 0;
-        try (OutputStream out = Files.newOutputStream(path, StandardOpenOption.CREATE_NEW)) {
-            byte[] b = new byte[16384];
-            int n;
-            while ((n = in.read(b)) != -1) {
-                total += n;
-                if (total > limit) throw new IOException("Import exceeds storage limit");
-                out.write(b, 0, n);
-            }
-        } catch (IOException e) {
-            Files.deleteIfExists(path);
-            throw e;
-        }
-        return total;
     }
 
     private void share(String path) {
@@ -1560,6 +1583,18 @@ public final class MainActivity extends Activity {
         ForgeApplication state = app;
         Workspace owner = app.workspace;
         java.lang.ref.WeakReference<MainActivity> view = new java.lang.ref.WeakReference<>(this);
+        t.protectMutations(path -> {
+            for (ForgeApplication.OpenDocument document : state.documents) {
+                if (
+                    document.owner.root().equals(owner.root()) &&
+                    (document.path.equals(path) || document.path.startsWith(path + "/"))
+                ) {
+                    throw new IOException(
+                        "Close affected editor tabs before shell file changes; use the explorer to rename an open document"
+                    );
+                }
+            }
+        });
         t.register("run", (a, cwd, env, cancel) -> {
             String path = a.size() > 1 ? t.resolvePath(a.get(1)) : null;
             state.main.post(() -> {
@@ -1759,6 +1794,16 @@ public final class MainActivity extends Activity {
                 .append("Debug session ended · exit ")
                 .append(state.getInt("exit", 1))
                 .append('\n');
+            else if (state.getString("event", "").equals("continued")) b.append(
+                "Running · pause or stop to inspect execution\n"
+            );
+            else if (state.getString("event", "").equals("sandboxReady")) b.append(
+                "Isolated debugger ready\n"
+            );
+            else if (state.getString("event", "").equals("conditionError")) b
+                .append("Breakpoint condition error: ")
+                .append(state.getString("message", ""))
+                .append('\n');
             else if (state.getString("event", "").equals("evaluation")) b
                 .append("Watch: ")
                 .append(state.getString("expression", ""))
@@ -1848,6 +1893,18 @@ public final class MainActivity extends Activity {
         Map<String, String> launchEnvironment,
         String launchDirectory
     ) {
+        startRun(debug, requestedFile, terminal, launchArguments, launchEnvironment, launchDirectory, null);
+    }
+
+    private void startRun(
+        boolean debug,
+        String requestedFile,
+        TerminalSession terminal,
+        List<String> launchArguments,
+        Map<String, String> launchEnvironment,
+        String launchDirectory,
+        RunConfiguration configured
+    ) {
         if (app.isRunning()) {
             toast("Stop the active execution before starting another");
             return;
@@ -1859,6 +1916,14 @@ public final class MainActivity extends Activity {
             return;
         }
         if (languages.forFile(file).id().equals("html")) {
+            if (configured != null) {
+                error(
+                    new IOException(
+                        "Use Run current file for static HTML preview; no executable HTML toolchain is installed"
+                    )
+                );
+                return;
+            }
             if (debug) {
                 toast("Browser debugging requires a separate compatible provider");
                 return;
@@ -1870,7 +1935,15 @@ public final class MainActivity extends Activity {
             return;
         }
         String runtime = languages.forFile(file).id();
-        Toolchain provider = app.toolchains.forLanguage(runtime);
+        Toolchain provider;
+        try {
+            provider = configured == null
+                ? app.toolchains.forLanguage(runtime)
+                : app.toolchains.requireForLanguage(configured.toolchain, runtime);
+        } catch (IllegalArgumentException | IllegalStateException unavailable) {
+            error(unavailable);
+            return;
+        }
         if (provider == null) {
             toolchains();
             return;
@@ -1882,39 +1955,36 @@ public final class MainActivity extends Activity {
             toast("This provider has no interactive debugger installed");
             return;
         }
-        if (app.settings.bool("requireHardLimits")) {
-            error(
-                new SecurityException(
-                    "Hard memory quotas / CPU shares are not supported by Android's isolated JavaScript provider. Execution is blocked by your strict policy."
-                )
-            );
+        try {
+            app.executionPolicy().requireSupported(provider.restrictions());
+        } catch (SecurityException unsupported) {
+            error(unsupported);
             return;
         }
         Workspace runWorkspace = app.workspace;
         fileChange(
             () -> {
                 Path configPath = runWorkspace.resolve(".forge/run.json");
-                RunConfiguration base = Files.exists(configPath)
-                    ? RunConfiguration.parse(runWorkspace.read(".forge/run.json"))
-                    : new RunConfiguration(
-                          "Current file",
-                          "javascript",
-                          file,
-                          "",
-                          List.of(),
-                          Map.of(),
-                          "",
-                          List.of(),
-                          List.of(),
-                          List.of()
-                      );
-                runWorkspace.resolve(launchDirectory == null ? base.workingDirectory : launchDirectory);
-                if (
-                    app.toolchains
-                        .all()
-                        .stream()
-                        .noneMatch(p -> p.id().equals(base.toolchain))
-                ) throw new IOException("Selected toolchain is not installed: " + base.toolchain);
+                RunConfiguration base = configured != null
+                    ? configured
+                    : Files.exists(configPath)
+                        ? RunConfiguration.parse(runWorkspace.read(".forge/run.json"))
+                        : new RunConfiguration(
+                              "Current file",
+                              "javascript",
+                              file,
+                              "",
+                              List.of(),
+                              Map.of(),
+                              "",
+                              List.of(),
+                              List.of(),
+                              List.of()
+                          );
+                String directory = launchDirectory == null ? base.workingDirectory : launchDirectory;
+                if (!runWorkspace.isDirectory(directory)) throw new IOException(
+                    "Run working directory does not exist or is not a directory"
+                );
                 return new RunConfiguration(
                     base.name,
                     provider.id(),
@@ -1948,11 +2018,7 @@ public final class MainActivity extends Activity {
                         );
                         app.debugState = "";
                         if (terminal == null) showPanel(debug ? "Debugger" : "Output");
-                        SandboxPolicy policy = new SandboxPolicy(
-                            (debug ? 60 : app.settings.integer("executionSeconds")) * 1000L,
-                            app.settings.integer("outputKiB") * 1024,
-                            SandboxPolicy.safeDefault().required
-                        );
+                        SandboxPolicy policy = app.executionPolicy();
                         try {
                             executeProvider(
                                 provider,
@@ -1966,28 +2032,6 @@ public final class MainActivity extends Activity {
                                     app.main.post(() -> {
                                         app.debugState = json;
                                         app.changed();
-                                        if (destroyed) return;
-                                        try {
-                                            JsonObject event = JsonObject.parse(json);
-                                            if (event.getString("event", "").equals("sandboxReady")) return;
-                                            if (
-                                                event.getString("event", "").equals("stopped") &&
-                                                !event.getArray("stack").isEmpty()
-                                            ) {
-                                                JsonObject frame = new JsonObject(
-                                                    (Map<String, Object>) event.getArray("stack").get(0)
-                                                );
-                                                goTo(
-                                                    frame.getString("file", config.file),
-                                                    frame.getInt("line", 1) - 1,
-                                                    0
-                                                );
-                                                showPanel("Debugger");
-                                            }
-                                        } catch (Exception e) {
-                                            app.log(e.getMessage());
-                                        }
-                                        refreshState();
                                     })
                             ).whenComplete((exit, error) -> {
                                 appendOutput(
@@ -2004,6 +2048,7 @@ public final class MainActivity extends Activity {
                                     app.changed();
                                 }
                                 app.main.post(() -> {
+                                    if (destroyed) return;
                                     problems.clear();
                                     problems.addAll(BuildLog.diagnostics(app.output.toString()));
                                     refreshStatus();
@@ -2027,7 +2072,7 @@ public final class MainActivity extends Activity {
                     toast("Project changed; run cancelled");
                     return;
                 }
-                startRun(false, config.file, null);
+                startRun(false, config.file, null, null, null, null, config);
             }
         );
     }
@@ -2071,7 +2116,11 @@ public final class MainActivity extends Activity {
                 try {
                     cx.setOptimizationLevel(-1);
                     cx.setLanguageVersion(org.mozilla.javascript.Context.VERSION_ES6);
-                    cx.compileString(doc.content.toString(), doc.path, 1, null);
+                    String source = doc.content.toString();
+                    if (source.getBytes(StandardCharsets.UTF_8).length > 512 * 1024) throw new IOException(
+                        "Syntax checking is limited to 512 KiB; larger files remain editable in large-file mode"
+                    );
+                    cx.compileString(source, doc.path, 1, null);
                     return "Syntax check succeeded. JavaScript is interpreted; no native binary is produced.";
                 } finally {
                     org.mozilla.javascript.Context.exit();

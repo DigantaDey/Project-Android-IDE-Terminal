@@ -200,6 +200,7 @@ public class RuntimeTest {
             );
             assertNotNull(events.poll(2, TimeUnit.SECONDS));
             debugger.control("continue", "");
+            assertTrue(events.poll(2, TimeUnit.SECONDS).contains("continued"));
             String stopped = events.poll(2, TimeUnit.SECONDS);
             assertNotNull(stopped);
             assertTrue(stopped.contains("breakpoint"));

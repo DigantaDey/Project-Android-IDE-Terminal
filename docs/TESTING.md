@@ -28,17 +28,17 @@ bash scripts/device-tests.sh
 
 Instrumentation exercises:
 
-- Real native editor input, undo/redo, disk save, shared split views and terminal retention across Activity recreation, command controls, and out-of-project recovery.
-- Runtime identity, real kernel socket denial and private-file probes, real JavaScript/SQLite, interpreter/native-work deadlines, immediate cancel followed by rerun, old-token cancellation ownership, denied SQL attach/extensions, and unsupported strict-policy refusal.
+- Real native editor input, undo/redo, disk save, shared split views and terminal retention across Activity recreation, command controls, out-of-project recovery, dirty folder renames/journal/breakpoint migration, shell protection of open buffers, and effective execution-policy ceilings.
+- Runtime identity, real kernel socket denial and private-file probes, real JavaScript/SQLite, interpreter/native-work deadlines, immediate cancel followed by rerun, old-token cancellation ownership, denied SQL attach/extensions, unsupported strict-policy refusal, and real debugger stepping/watch evaluation/resume events through Binder.
 - Real local JGit commits/diffs/history/branches, repository TLS/redirect hardening and forbidden external cookie files, an executable hook witness that must not run, explicit process denial, and encrypted Keystore token round trips/deletion using fake fixture credentials.
 - Real static HTML rendering with scripts disabled and confined resource/URL handling.
-- A screenshot of the actual native workspace, written to the test app's external files directory and pulled into CI artifacts. It is not a design mock.
+- A screenshot of the actual native workspace, written to the test app's external files directory, with a test-only automation capture in `/data/local/tmp` so runner uninstall cannot remove the CI copy. It is not a design mock; the production app exposes no shell automation API.
 
 No real GitHub token or external network dependency is used by device tests. Network authentication/remote server compatibility must be tested separately with a dedicated least-privilege test account; do not put credentials in CI logs or this repository.
 
 ## Core regressions
 
-The Java library suites cover the edit/undo model and 4,000 randomized edits; malformed-Unicode token tiling; indentation/pairs/folds; bounded catastrophic regex, zero-width/contextual replacements, Java replacement-template compatibility, large single-pass replacement, stale matches and oversized expansions; JSON validity/formatting lexemes; SQL splitting; path/symlink confinement, invalid UTF-8, checked-save conflicts and ZIP traversal/limits; recoverable trash and restore conflicts; project-search snapshots; cancellation races; UTF-8 output limits; recovery checksums; terminal confinement/history; URL/conflict policy; actual JS execution/deadline/cancellation/debug watches; command registry; run configs/build-log parsing; and real in-memory LSP/DAP framing/correlation/disconnect tests.
+The Java library suites cover the edit/undo model and 4,000 randomized edits; malformed-Unicode token tiling; indentation/pairs/folds; bounded catastrophic regex, zero-width/contextual replacements, Java replacement-template compatibility, large single-pass replacement, stale matches and oversized expansions; JSON validity/formatting lexemes; SQL splitting; path/symlink confinement, invalid UTF-8, checked-save conflicts and ZIP traversal/limits; recoverable trash and restore conflicts; project-search snapshots; cancellation races; UTF-8 output limits; recovery checksums, corrupt-entry isolation and bounded project restoration; staged provider imports/failures/conflicts; terminal confinement/history/open-buffer mutation guards; URL/conflict policy; actual JS execution/deadline/cancellation/debug watches; command registry; run configs/provider-language compatibility/build-log parsing; and real in-memory LSP/DAP framing/correlation/disconnect tests.
 
 An optional offline ECJ/JUnit harness exists at `scripts/test-local.sh` for restricted environments. It needs ECJ, JUnit, Hamcrest, and Rhino jars in `.local/tools` and a working Java runtime (`JAVA=…`). Those jars are not vendored. The standard reproducible path is Gradle; the optional harness does not compile the Android app or replace Android lint/device tests.
 
@@ -49,7 +49,7 @@ An optional offline ECJ/JUnit harness exists at `scripts/test-local.sh` for rest
 1. Core Gradle tests, Android app + test APK compilation, and Android lint.
 2. Hardware-accelerated emulator instrumentation after a successful build.
 
-A newer push cancels an older in-progress run. A cancelled emulator is not a passed emulator. Check the exact HEAD commit's run, not an older green build.
+The device stage also requires nonempty instrumentation XML and publishes the passed/failed/skipped count. A newer push cancels an older in-progress run. A cancelled emulator is not a passed emulator. Check the exact HEAD commit's run, not an older green build.
 
 Artifacts: **forge-ide-debug-apk**, **test-and-lint-reports**, and **device-test-reports**. Failure diagnostics are also emitted as GitHub check annotations, including instrumentation XML failures, so assertion messages remain visible if artifact download is unavailable.
 
@@ -79,4 +79,4 @@ npm --prefix tools/format run format
 
 The lockfile pins Prettier and its Java plugin. No package-manager functionality is implied inside the Android app.
 
-For a restricted QA environment that cannot follow GitHub's artifact-storage redirects, a manual workflow dispatch can enable `visual_report=true`, or a deliberate `[visual-qa]` commit-message marker can opt in on a branch that has not yet added its workflow to the default branch. It emits only the small fixture-workspace JPEG as machine-readable check notices; normal push CI only uploads the original PNG artifact. Never enable screenshot transport for a run using private user projects or credentials.
+For a restricted QA environment that cannot follow GitHub's artifact-storage redirects, a manual workflow dispatch can enable `visual_report=true`, or a deliberate `[visual-qa]` commit-message marker can opt in on a branch that has not yet added its workflow to the default branch. It emits only the small fixture-workspace JPEG as machine-readable check notices. A test-only instrumentation flag records bounded thumbnail chunks under a dedicated log tag if runner uninstall prevents direct retrieval; the reporter rejects missing/incomplete data. Normal push CI only uploads the PNG artifact and does not log thumbnail bytes. Never enable screenshot transport for a run using private user projects or credentials.

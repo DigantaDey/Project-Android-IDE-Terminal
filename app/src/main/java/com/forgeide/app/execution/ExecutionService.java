@@ -17,7 +17,7 @@ public final class ExecutionService extends Service {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler watchdog = new Handler(Looper.getMainLooper());
     private CancellationToken token;
-    private ScriptDebugger debugger;
+    private volatile ScriptDebugger debugger;
     private volatile boolean running;
 
     private static boolean networkSocketDenied() {
@@ -79,7 +79,7 @@ public final class ExecutionService extends Service {
                                 android.os.Process.myUid() != getApplicationInfo().uid,
                                 "hostFilesReadable",
                                 new File(
-                                    getApplicationInfo().dataDir,
+                                    new File(getApplicationInfo().dataDir, "files"),
                                     "state/isolation-witness.txt"
                                 ).canRead(),
                                 "networkSocketDenied",
