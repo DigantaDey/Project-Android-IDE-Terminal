@@ -104,7 +104,9 @@ def resolve(packages, roots):
             if not clause.strip():
                 continue
             alternatives = [re.split(r"[ (:]", v.strip())[0] for v in clause.split("|")]
-            chosen = next((v for v in alternatives if v in available or v in aliases), None)
+            chosen = next((v for v in alternatives if v in selected), None)
+            if chosen is None:
+                chosen = next((v for v in alternatives if v in available or v in aliases), None)
             if not chosen:
                 raise ValueError("Unresolved dependency of " + name + ": " + clause)
             add(chosen)

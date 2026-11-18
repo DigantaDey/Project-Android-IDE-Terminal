@@ -106,7 +106,7 @@ final class NativePayload {
             !Files.isSymbolicLink(prefix) &&
             Files.isRegularFile(marker, LinkOption.NOFOLLOW_LINKS) &&
             Files.size(marker) == 64 &&
-            Files.readString(marker).equals(id())
+            com.forgeide.core.util.AtomicFiles.readUtf8(marker).equals(id())
         ) return;
         Path stage = context.getFilesDir().toPath().resolve("usr.installing");
         delete(stage);
@@ -197,7 +197,7 @@ final class NativePayload {
             }
             for (String dir : List.of("tmp", "var/tmp", "var/run", "etc"))
                 Files.createDirectories(stage.resolve(dir));
-            Files.writeString(stage.resolve(".forge-bundle-id"), id());
+            com.forgeide.core.util.AtomicFiles.write(stage.resolve(".forge-bundle-id"), id());
             delete(prefix);
             Files.move(stage, prefix);
         } catch (Exception error) {

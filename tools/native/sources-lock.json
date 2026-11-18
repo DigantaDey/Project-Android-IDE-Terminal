@@ -1,0 +1,928 @@
+{
+  "schema": 1,
+  "recipes": {
+    "commit": "6ec3ffd97c11005ed390a16218d8616a9c284064",
+    "url": "https://codeload.github.com/termux/termux-packages/zip/6ec3ffd97c11005ed390a16218d8616a9c284064",
+    "sha256": "812831fe3a8ce2f5ac5bcb78bd6b1bafc31bd67e5f33abcfbed42ff01bb38cae"
+  },
+  "inputs": [
+    {
+      "package": "attr",
+      "version": "2.6.0",
+      "license": "GPL-2.0",
+      "filename": "attr-0-attr-2.6.0.tar.gz",
+      "url": "https://download.savannah.gnu.org/releases/attr/attr-2.6.0.tar.gz",
+      "sha256": "d42fa374513180bb48cb11a46696f488240e5124ff1e6ad88b0abff706985612"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-0-bash-5.3.tar.gz",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3.tar.gz",
+      "sha256": "0d5cd86965f869a26cf64f4b71be7b96f90a3ba8b3d74e27e8e9d9d5550f31ba"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-001",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-001",
+      "sha256": "1f608434364af86b9b45c8b0ea3fb3b165fb830d27697e6cdfc7ac17dee3287f"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-002",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-002",
+      "sha256": "e385548a00130765ec7938a56fbdca52447ab41fabc95a25f19ade527e282001"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-003",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-003",
+      "sha256": "f245d9c7dc3f5a20d84b53d249334747940936f09dc97e1dcb89fc3ab37d60ed"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-004",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-004",
+      "sha256": "9591d245045529f32f0812f94180b9d9ce9023f5a765c039b852e5dfc99747d0"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-005",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-005",
+      "sha256": "cca1ef52dbbf433bc98e33269b64b2c814028efe2538be1e2c9a377da90bc99d"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-006",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-006",
+      "sha256": "29119addefed8eff91ae37fd51822c31780ee30d4a28376e96002706c995ff10"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-007",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-007",
+      "sha256": "c0976bbfffa1453c7cfdd62058f206a318568ff2d690f5d4fa048793fa3eb299"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-008",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-008",
+      "sha256": "097cd723cbfb8907674ac32214063a3fd85282657ec5b4e544d2c0f719653fb4"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-009",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-009",
+      "sha256": "eee30fe78a4b0cb2fe20e010e00308899cfc613e0774ebb3c8557a1552f24f8c"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-010",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-010",
+      "sha256": "cf76f1cce2ea300c18bff9f002d21f280cc931acd17c28518110b93fe6e72569"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-011",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-011",
+      "sha256": "0298df8f5ea2a31d3be43ed7d269c5b3c7c342dd5b570bea7f64d66dcbbe7531"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-012",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-012",
+      "sha256": "d71379b39bebaedaf123414414e77fb458a0a43b9ad3116594c6df7ca6754573"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-013",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-013",
+      "sha256": "042f9cda967e24bf4211944697441e93d06ff42b4b998629a98a1b249279f200"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-014",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-014",
+      "sha256": "bd4360b401d38507e358783dcad8536a99c6789f0d3a5bd0cfb8c4a34144696c"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-015",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-015",
+      "sha256": "55b79ceee2fc27f6767eed697e939a7eb2fe2a28c01556bd75f18d581014f46e"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-016",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-016",
+      "sha256": "9ea29b266b7d24cb34d0ff3f1c4631e4d527bfe2d1ef15d17cdb924bf31ef767"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-017",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-017",
+      "sha256": "443b927b45c1558ca72052410f8b8f6e5152b617ed707061a2781d4375b0d1c3"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-018",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-018",
+      "sha256": "ae715d76c50341d7d7095e9a8d2eeed1ca9546152c2ac7289206f90cf30ac697"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-019",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-019",
+      "sha256": "a25c581e4d0057dea3833918438a930e2e86ee4c6dc17fe15267b7f04cbc4e3d"
+    },
+    {
+      "package": "bash",
+      "version": "5.3.20",
+      "license": "GPL-3.0",
+      "filename": "bash-patch-020",
+      "url": "https://mirrors.kernel.org/gnu/bash/bash-5.3-patches/bash53-020",
+      "sha256": "df217ed3a9122aa2286d9b67bbe348661b6a9db262b580c29150dae55d532896"
+    },
+    {
+      "package": "ca-certificates",
+      "version": "1:2026.11.05",
+      "license": "MPL-2.0",
+      "filename": "ca-certificates-0-cacert-2026-11-05.pem",
+      "url": "https://curl.se/ca/cacert-2026-11-05.pem",
+      "sha256": "427c064216761a1e72a8b30f0d954d08cb6e4435a82091fb865afd20c8497285"
+    },
+    {
+      "package": "coreutils",
+      "version": "9.12",
+      "license": "GPL-3.0",
+      "filename": "coreutils-0-coreutils-9.12.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/coreutils/coreutils-9.12.tar.xz",
+      "sha256": "a480198559733e9b3da999e90543ac6f888a2caa544d8d664c5a1f17e528e210"
+    },
+    {
+      "package": "dialog",
+      "version": "1.3-20260721",
+      "license": "LGPL-2.1",
+      "filename": "dialog-0-dialog-1.3-20260721.tgz",
+      "url": "https://invisible-mirror.net/archives/dialog/dialog-1.3-20260721.tgz",
+      "sha256": "62bdf59057d4f760a1cc2217827f07887b4a3eebf694c25eacd4803d2171cdc6"
+    },
+    {
+      "package": "diffutils",
+      "version": "3.12",
+      "license": "GPL-3.0",
+      "filename": "diffutils-0-diffutils-3.12.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/diffutils/diffutils-3.12.tar.xz",
+      "sha256": "7c8b7f9fc8609141fdea9cece85249d308624391ff61dedaf528fcb337727dfd"
+    },
+    {
+      "package": "findutils",
+      "version": "4.11.0",
+      "license": "GPL-3.0",
+      "filename": "findutils-0-findutils-4.11.0.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/findutils/findutils-4.11.0.tar.xz",
+      "sha256": "bfd19cb06cc71f3352d567e90284d8cdac02ac89774bbeadf0b533b0c11432fd"
+    },
+    {
+      "package": "gawk",
+      "version": "5.4.1",
+      "license": "GPL-3.0",
+      "filename": "gawk-0-gawk-5.4.1.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/gawk/gawk-5.4.1.tar.xz",
+      "sha256": "07f6f7342b7febe4313fc2c2542ad93d64fe20ad8717200109f105a826f5fd37"
+    },
+    {
+      "package": "gdbm",
+      "version": "1.26",
+      "license": "GPL-3.0",
+      "filename": "gdbm-0-gdbm-1.26.tar.gz",
+      "url": "https://mirrors.kernel.org/gnu/gdbm/gdbm-1.26.tar.gz",
+      "sha256": "6a24504a14de4a744103dcb936be976df6fbe88ccff26065e54c1c47946f4a5e"
+    },
+    {
+      "package": "grep",
+      "version": "3.12",
+      "license": "GPL-3.0",
+      "filename": "grep-0-grep-3.12.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/grep/grep-3.12.tar.xz",
+      "sha256": "2649b27c0e90e632eadcd757be06c6e9a4f48d941de51e7c0f83ff76408a07b9"
+    },
+    {
+      "package": "gzip",
+      "version": "1.15",
+      "license": "GPL-3.0",
+      "filename": "gzip-0-gzip-1.15.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/gzip/gzip-1.15.tar.xz",
+      "sha256": "9aa0cc780dec156b8282844833b342ab7cb08c25d2cd9a1869cdd0df31deff48"
+    },
+    {
+      "package": "less",
+      "version": "710",
+      "license": "GPL-3.0, custom",
+      "filename": "less-0-less-710.tar.gz",
+      "url": "https://www.greenwoodsoftware.com/less/less-710.tar.gz",
+      "sha256": "d1008fb78dcae1323ddab664bcb352a61f022b1b131bd8018548e021d975ec7a"
+    },
+    {
+      "package": "libacl",
+      "version": "2.4.0",
+      "license": "LGPL-2.1, GPL-2.0",
+      "filename": "libacl-0-acl-2.4.0.tar.gz",
+      "url": "https://download.savannah.gnu.org/releases/acl/acl-2.4.0.tar.gz",
+      "sha256": "73c853c3d44e1f693e5a96a986f1bd19d3d0dac2c7d453e796177774bc4e5f6a"
+    },
+    {
+      "package": "libcap-ng",
+      "version": "2:0.9.6",
+      "license": "LGPL-2.1",
+      "filename": "libcap-ng-0-v0.9.6.tar.gz",
+      "url": "https://github.com/stevegrubb/libcap-ng/archive/refs/tags/v0.9.6.tar.gz",
+      "sha256": "399040138e0ca62fa2bcabd63da9af4431a246ef7a654561a0ca3cb00010a539"
+    },
+    {
+      "package": "libgmp",
+      "version": "6.3.0",
+      "license": "LGPL-3.0",
+      "filename": "libgmp-0-gmp-6.3.0.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz",
+      "sha256": "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+    },
+    {
+      "package": "libiconv",
+      "version": "1.19.1",
+      "license": "LGPL-2.1, GPL-3.0",
+      "filename": "libiconv-0-libiconv-1.19.1.tar.gz",
+      "url": "https://mirrors.kernel.org/gnu/libiconv/libiconv-1.19.1.tar.gz",
+      "sha256": "9a06844846d664d7122161700c10a64480d7c7bcead3091925a785b38c91edab"
+    },
+    {
+      "package": "liblzma",
+      "version": "5.8.4",
+      "license": "LGPL-2.1, GPL-2.0, GPL-3.0",
+      "filename": "liblzma-0-xz-5.8.4.tar.xz",
+      "url": "https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.xz",
+      "sha256": "4ce24038fd4221e0d13bc1a2de7a4db56e90b92b3bf75321f6c14be73f65de4b"
+    },
+    {
+      "package": "libmpfr",
+      "version": "4.2.2",
+      "license": "LGPL-3.0",
+      "filename": "libmpfr-0-mpfr-4.2.2.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/mpfr/mpfr-4.2.2.tar.xz",
+      "sha256": "b67ba0383ef7e8a8563734e2e889ef5ec3c3b898a01d00fa0a6869ad81c6ce01"
+    },
+    {
+      "package": "make",
+      "version": "4.4.1",
+      "license": "GPL-3.0",
+      "filename": "make-0-make-4.4.1.tar.gz",
+      "url": "https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz",
+      "sha256": "dd16fb1d67bfab79a72f5e8390735c49e3e8e70b4945a15ab1f81ddb78658fb3"
+    },
+    {
+      "package": "procps",
+      "version": "4.0.7",
+      "license": "LGPL-2.0",
+      "filename": "procps-0-procps-ng-4.0.7.tar.xz",
+      "url": "https://sourceforge.net/projects/procps-ng/files/Production/procps-ng-4.0.7.tar.xz",
+      "sha256": "9d2021f47a4501c667862c9942a92d1953694b21d11bcd1702e83eb594e3d67d"
+    },
+    {
+      "package": "psmisc",
+      "version": "23.7",
+      "license": "GPL-2.0",
+      "filename": "psmisc-0-psmisc-23.7.tar.xz",
+      "url": "https://fossies.org/linux/misc/psmisc-23.7.tar.xz",
+      "sha256": "58c55d9c1402474065adae669511c191de374b0871eec781239ab400b907c327"
+    },
+    {
+      "package": "readline",
+      "version": "8.3.6",
+      "license": "GPL-3.0",
+      "filename": "readline-0-readline-8.3.tar.gz",
+      "url": "https://mirrors.kernel.org/gnu/readline/readline-8.3.tar.gz",
+      "sha256": "fe5383204467828cd495ee8d1d3c037a7eba1389c22bc6a041f627976f9061cc"
+    },
+    {
+      "package": "readline",
+      "version": "8.3.6",
+      "license": "GPL-3.0",
+      "filename": "readline-patch-001",
+      "url": "https://mirrors.kernel.org/gnu/readline/readline-8.3-patches/readline83-001",
+      "sha256": "21f0a03106dbe697337cd25c70eb0edbaa2bdb6d595b45f83285cdd35bac84de"
+    },
+    {
+      "package": "readline",
+      "version": "8.3.6",
+      "license": "GPL-3.0",
+      "filename": "readline-patch-002",
+      "url": "https://mirrors.kernel.org/gnu/readline/readline-8.3-patches/readline83-002",
+      "sha256": "e27364396ba9f6debf7cbaaf1a669e2b2854241ae07f7eca74ca8a8ba0c97472"
+    },
+    {
+      "package": "readline",
+      "version": "8.3.6",
+      "license": "GPL-3.0",
+      "filename": "readline-patch-003",
+      "url": "https://mirrors.kernel.org/gnu/readline/readline-8.3-patches/readline83-003",
+      "sha256": "72dee13601ce38f6746eb15239999a7c56f8e1ff5eb1ec8153a1f213e4acdb29"
+    },
+    {
+      "package": "readline",
+      "version": "8.3.6",
+      "license": "GPL-3.0",
+      "filename": "readline-patch-004",
+      "url": "https://mirrors.kernel.org/gnu/readline/readline-8.3-patches/readline83-004",
+      "sha256": "1f189c4566aa35950964647b9ec3be1a821e42b86048129c63eb7f9d4d2f5a74"
+    },
+    {
+      "package": "readline",
+      "version": "8.3.6",
+      "license": "GPL-3.0",
+      "filename": "readline-patch-005",
+      "url": "https://mirrors.kernel.org/gnu/readline/readline-8.3-patches/readline83-005",
+      "sha256": "5481adbe161c9f6ba972c74db9e18c7aa351d3df3035cc4a673a1aa06247d1c6"
+    },
+    {
+      "package": "readline",
+      "version": "8.3.6",
+      "license": "GPL-3.0",
+      "filename": "readline-patch-006",
+      "url": "https://mirrors.kernel.org/gnu/readline/readline-8.3-patches/readline83-006",
+      "sha256": "4ebd261a608287796e171af0ea9af5a1e3122e46672accda2484b6698c47c1a4"
+    },
+    {
+      "package": "sed",
+      "version": "4.10",
+      "license": "GPL-3.0",
+      "filename": "sed-0-sed-4.10.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/sed/sed-4.10.tar.xz",
+      "sha256": "b8e72182b2ec96a3574e2998c47b7aaa64cc20ce000d8e9ac313cc07cecf28c7"
+    },
+    {
+      "package": "tar",
+      "version": "1.35",
+      "license": "GPL-3.0",
+      "filename": "tar-0-tar-1.35.tar.xz",
+      "url": "https://mirrors.kernel.org/gnu/tar/tar-1.35.tar.xz",
+      "sha256": "4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16"
+    },
+    {
+      "package": "termux-am-socket",
+      "version": "1.5.0",
+      "license": "GPL-3.0",
+      "filename": "termux-am-socket-0-1.5.0.tar.gz",
+      "url": "https://github.com/termux/termux-am-socket/archive/refs/tags/1.5.0.tar.gz",
+      "sha256": "5175023c7fd675492451a72d06b75c772f257685b69fe117227bae5a5e6f5494"
+    },
+    {
+      "package": "termux-tools",
+      "version": "1.46.0+really1.45.0",
+      "license": "GPL-3.0",
+      "filename": "termux-tools-0-v1.45.0.tar.gz",
+      "url": "https://github.com/termux/termux-tools/archive/refs/tags/v1.45.0.tar.gz",
+      "sha256": "1ae29b1b875d95cc626dae323b45a2ace759969862d96094b2fa6d13bffe20d2"
+    },
+    {
+      "package": "util-linux",
+      "version": "2.42.4",
+      "license": "GPL-3.0-or-later, GPL-2.0-or-later, LGPL-2.1-or-later, BSD 3-Clause, BSD, ISC",
+      "filename": "util-linux-0-util-linux-2.42.4.tar.xz",
+      "url": "https://www.kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-2.42.4.tar.xz",
+      "sha256": "fbd62a100ab7bb8746ba0661255c3c48185b1e9021507c624da01fbc696330ec"
+    },
+    {
+      "package": "zstd",
+      "version": "1.5.7",
+      "license": "GPL-2.0",
+      "filename": "zstd-0-v1.5.7.tar.gz",
+      "url": "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+      "sha256": "37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3"
+    }
+  ],
+  "packageLockSha256": "9da6e43a62f81c0babeabd9a7b8ba31564e7576bc70f7c5d4dc118b180369a95",
+  "packages": [
+    {
+      "name": "attr",
+      "binaryVersion": "2.6.0",
+      "recipe": "attr",
+      "sourceVersion": "2.6.0",
+      "license": "GPL-2.0"
+    },
+    {
+      "name": "bash",
+      "binaryVersion": "5.3.20",
+      "recipe": "bash",
+      "sourceVersion": "5.3.20",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "bzip2",
+      "binaryVersion": "1.0.8-8",
+      "recipe": "libbz2",
+      "sourceVersion": "1.0.8",
+      "license": "BSD"
+    },
+    {
+      "name": "c-ares",
+      "binaryVersion": "1.34.9",
+      "recipe": "c-ares",
+      "sourceVersion": "1.34.9",
+      "license": "MIT"
+    },
+    {
+      "name": "ca-certificates",
+      "binaryVersion": "1:2026.11.05-1",
+      "recipe": "ca-certificates",
+      "sourceVersion": "1:2026.11.05",
+      "license": "MPL-2.0"
+    },
+    {
+      "name": "clang",
+      "binaryVersion": "21.1.8-3",
+      "recipe": "libllvm",
+      "sourceVersion": "21.1.8",
+      "license": "Apache-2.0, NCSA"
+    },
+    {
+      "name": "coreutils",
+      "binaryVersion": "9.12",
+      "recipe": "coreutils",
+      "sourceVersion": "9.12",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "curl",
+      "binaryVersion": "8.23.0",
+      "recipe": "libcurl",
+      "sourceVersion": "8.23.0",
+      "license": "MIT"
+    },
+    {
+      "name": "dash",
+      "binaryVersion": "0.5.13.5",
+      "recipe": "dash",
+      "sourceVersion": "0.5.13.5",
+      "license": "BSD 3-Clause"
+    },
+    {
+      "name": "dialog",
+      "binaryVersion": "1.3-20260721-0",
+      "recipe": "dialog",
+      "sourceVersion": "1.3-20260721",
+      "license": "LGPL-2.1"
+    },
+    {
+      "name": "diffutils",
+      "binaryVersion": "3.12-2",
+      "recipe": "diffutils",
+      "sourceVersion": "3.12",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "findutils",
+      "binaryVersion": "4.11.0",
+      "recipe": "findutils",
+      "sourceVersion": "4.11.0",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "gawk",
+      "binaryVersion": "5.4.1",
+      "recipe": "gawk",
+      "sourceVersion": "5.4.1",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "gdbm",
+      "binaryVersion": "1.26-1",
+      "recipe": "gdbm",
+      "sourceVersion": "1.26",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "grep",
+      "binaryVersion": "3.12-3",
+      "recipe": "grep",
+      "sourceVersion": "3.12",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "gzip",
+      "binaryVersion": "1.15",
+      "recipe": "gzip",
+      "sourceVersion": "1.15",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "less",
+      "binaryVersion": "710",
+      "recipe": "less",
+      "sourceVersion": "710",
+      "license": "GPL-3.0, custom"
+    },
+    {
+      "name": "libacl",
+      "binaryVersion": "2.4.0",
+      "recipe": "libacl",
+      "sourceVersion": "2.4.0",
+      "license": "LGPL-2.1, GPL-2.0"
+    },
+    {
+      "name": "libandroid-glob",
+      "binaryVersion": "0.6-3",
+      "recipe": "libandroid-glob",
+      "sourceVersion": "0.6",
+      "license": "BSD 3-Clause"
+    },
+    {
+      "name": "libandroid-posix-semaphore",
+      "binaryVersion": "0.1-4",
+      "recipe": "libandroid-posix-semaphore",
+      "sourceVersion": "0.1",
+      "license": "MIT"
+    },
+    {
+      "name": "libandroid-selinux",
+      "binaryVersion": "14.0.0.11-1",
+      "recipe": "libandroid-selinux",
+      "sourceVersion": "14.0.0.11",
+      "license": "Public Domain"
+    },
+    {
+      "name": "libandroid-support",
+      "binaryVersion": "29-1",
+      "recipe": "libandroid-support",
+      "sourceVersion": "29",
+      "license": "Apache-2.0, MIT"
+    },
+    {
+      "name": "libbz2",
+      "binaryVersion": "1.0.8-8",
+      "recipe": "libbz2",
+      "sourceVersion": "1.0.8",
+      "license": "BSD"
+    },
+    {
+      "name": "libc++",
+      "binaryVersion": "30",
+      "recipe": "libc++",
+      "sourceVersion": "30",
+      "license": "NCSA"
+    },
+    {
+      "name": "libcap-ng",
+      "binaryVersion": "2:0.9.6",
+      "recipe": "libcap-ng",
+      "sourceVersion": "2:0.9.6",
+      "license": "LGPL-2.1"
+    },
+    {
+      "name": "libcompiler-rt",
+      "binaryVersion": "21.1.8-3",
+      "recipe": "libllvm",
+      "sourceVersion": "21.1.8",
+      "license": "Apache-2.0, NCSA"
+    },
+    {
+      "name": "libcrypt",
+      "binaryVersion": "0.2-6",
+      "recipe": "libcrypt",
+      "sourceVersion": "0.2",
+      "license": "BSD 2-Clause"
+    },
+    {
+      "name": "libcurl",
+      "binaryVersion": "8.23.0",
+      "recipe": "libcurl",
+      "sourceVersion": "8.23.0",
+      "license": "MIT"
+    },
+    {
+      "name": "libexpat",
+      "binaryVersion": "2.10.0",
+      "recipe": "libexpat",
+      "sourceVersion": "2.10.0",
+      "license": "MIT"
+    },
+    {
+      "name": "libffi",
+      "binaryVersion": "3.8.1",
+      "recipe": "libffi",
+      "sourceVersion": "3.8.1",
+      "license": "MIT"
+    },
+    {
+      "name": "libgmp",
+      "binaryVersion": "6.3.0-2",
+      "recipe": "libgmp",
+      "sourceVersion": "6.3.0",
+      "license": "LGPL-3.0"
+    },
+    {
+      "name": "libiconv",
+      "binaryVersion": "1.19.1",
+      "recipe": "libiconv",
+      "sourceVersion": "1.19.1",
+      "license": "LGPL-2.1, GPL-3.0"
+    },
+    {
+      "name": "libicu",
+      "binaryVersion": "79.1",
+      "recipe": "libicu",
+      "sourceVersion": "79.1",
+      "license": "custom"
+    },
+    {
+      "name": "libllvm",
+      "binaryVersion": "21.1.8-3",
+      "recipe": "libllvm",
+      "sourceVersion": "21.1.8",
+      "license": "Apache-2.0, NCSA"
+    },
+    {
+      "name": "liblzma",
+      "binaryVersion": "5.8.4",
+      "recipe": "liblzma",
+      "sourceVersion": "5.8.4",
+      "license": "LGPL-2.1, GPL-2.0, GPL-3.0"
+    },
+    {
+      "name": "libmpfr",
+      "binaryVersion": "4.2.2",
+      "recipe": "libmpfr",
+      "sourceVersion": "4.2.2",
+      "license": "LGPL-3.0"
+    },
+    {
+      "name": "libnghttp2",
+      "binaryVersion": "1.71.0",
+      "recipe": "libnghttp2",
+      "sourceVersion": "1.71.0",
+      "license": "MIT"
+    },
+    {
+      "name": "libnghttp3",
+      "binaryVersion": "1.19.0",
+      "recipe": "libnghttp3",
+      "sourceVersion": "1.19.0",
+      "license": "MIT"
+    },
+    {
+      "name": "libngtcp2",
+      "binaryVersion": "1.26.0",
+      "recipe": "libngtcp2",
+      "sourceVersion": "1.26.0",
+      "license": "MIT"
+    },
+    {
+      "name": "libsmartcols",
+      "binaryVersion": "2.42.4",
+      "recipe": "util-linux",
+      "sourceVersion": "2.42.4",
+      "license": "GPL-3.0-or-later, GPL-2.0-or-later, LGPL-2.1-or-later, BSD 3-Clause, BSD, ISC"
+    },
+    {
+      "name": "libsqlite",
+      "binaryVersion": "3.54.1-1",
+      "recipe": "libsqlite",
+      "sourceVersion": "3.54.1",
+      "license": "Public Domain"
+    },
+    {
+      "name": "libssh2",
+      "binaryVersion": "1.11.1-2",
+      "recipe": "libssh2",
+      "sourceVersion": "1.11.1",
+      "license": "BSD 3-Clause"
+    },
+    {
+      "name": "libxml2",
+      "binaryVersion": "2.15.4-1",
+      "recipe": "libxml2",
+      "sourceVersion": "2.15.4",
+      "license": "MIT"
+    },
+    {
+      "name": "lld",
+      "binaryVersion": "21.1.8-3",
+      "recipe": "libllvm",
+      "sourceVersion": "21.1.8",
+      "license": "Apache-2.0, NCSA"
+    },
+    {
+      "name": "llvm",
+      "binaryVersion": "21.1.8-3",
+      "recipe": "libllvm",
+      "sourceVersion": "21.1.8",
+      "license": "Apache-2.0, NCSA"
+    },
+    {
+      "name": "make",
+      "binaryVersion": "4.4.1-1",
+      "recipe": "make",
+      "sourceVersion": "4.4.1",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "ncurses",
+      "binaryVersion": "6.6.20260307+really6.5.20250830",
+      "recipe": "ncurses",
+      "sourceVersion": "6.6.20260307+really6.5.20250830",
+      "license": "MIT"
+    },
+    {
+      "name": "ncurses-ui-libs",
+      "binaryVersion": "6.6.20260307+really6.5.20250830",
+      "recipe": "ncurses",
+      "sourceVersion": "6.6.20260307+really6.5.20250830",
+      "license": "MIT"
+    },
+    {
+      "name": "ndk-sysroot",
+      "binaryVersion": "30",
+      "recipe": "ndk-sysroot",
+      "sourceVersion": "30",
+      "license": "NCSA"
+    },
+    {
+      "name": "nodejs-lts",
+      "binaryVersion": "24.22.3",
+      "recipe": "nodejs-lts",
+      "sourceVersion": "24.22.3",
+      "license": "MIT"
+    },
+    {
+      "name": "npm",
+      "binaryVersion": "12.2.3",
+      "recipe": "npm",
+      "sourceVersion": "12.2.3",
+      "license": "Artistic-License-2.0"
+    },
+    {
+      "name": "openssl",
+      "binaryVersion": "1:3.6.5",
+      "recipe": "openssl",
+      "sourceVersion": "1:3.6.5",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "pcre2",
+      "binaryVersion": "10.49",
+      "recipe": "pcre2",
+      "sourceVersion": "10.49",
+      "license": "BSD 3-Clause"
+    },
+    {
+      "name": "procps",
+      "binaryVersion": "4.0.7-2",
+      "recipe": "procps",
+      "sourceVersion": "4.0.7",
+      "license": "LGPL-2.0"
+    },
+    {
+      "name": "psmisc",
+      "binaryVersion": "23.7-1",
+      "recipe": "psmisc",
+      "sourceVersion": "23.7",
+      "license": "GPL-2.0"
+    },
+    {
+      "name": "python",
+      "binaryVersion": "3.14.10",
+      "recipe": "python",
+      "sourceVersion": "3.14.10",
+      "license": "custom"
+    },
+    {
+      "name": "readline",
+      "binaryVersion": "8.3.6",
+      "recipe": "readline",
+      "sourceVersion": "8.3.6",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "resolv-conf",
+      "binaryVersion": "1.3",
+      "recipe": "resolv-conf",
+      "sourceVersion": "1.3",
+      "license": "Public Domain"
+    },
+    {
+      "name": "sed",
+      "binaryVersion": "4.10",
+      "recipe": "sed",
+      "sourceVersion": "4.10",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "tar",
+      "binaryVersion": "1.35-3",
+      "recipe": "tar",
+      "sourceVersion": "1.35",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "termux-am",
+      "binaryVersion": "0.8.1",
+      "recipe": "termux-am",
+      "sourceVersion": "0.8.1",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "termux-am-socket",
+      "binaryVersion": "1.5.0-1",
+      "recipe": "termux-am-socket",
+      "sourceVersion": "1.5.0",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "termux-core",
+      "binaryVersion": "0.4.0-1",
+      "recipe": "termux-core",
+      "sourceVersion": "0.4.0",
+      "license": "MIT"
+    },
+    {
+      "name": "termux-exec",
+      "binaryVersion": "1:2.5.0-1",
+      "recipe": "termux-exec",
+      "sourceVersion": "1:2.5.0",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "termux-tools",
+      "binaryVersion": "1.46.0+really1.45.0-1",
+      "recipe": "termux-tools",
+      "sourceVersion": "1.46.0+really1.45.0",
+      "license": "GPL-3.0"
+    },
+    {
+      "name": "util-linux",
+      "binaryVersion": "2.42.4",
+      "recipe": "util-linux",
+      "sourceVersion": "2.42.4",
+      "license": "GPL-3.0-or-later, GPL-2.0-or-later, LGPL-2.1-or-later, BSD 3-Clause, BSD, ISC"
+    },
+    {
+      "name": "xz-utils",
+      "binaryVersion": "5.8.4",
+      "recipe": "liblzma",
+      "sourceVersion": "5.8.4",
+      "license": "LGPL-2.1, GPL-2.0, GPL-3.0"
+    },
+    {
+      "name": "zlib",
+      "binaryVersion": "1.4",
+      "recipe": "zlib",
+      "sourceVersion": "1.4",
+      "license": "ZLIB"
+    },
+    {
+      "name": "zstd",
+      "binaryVersion": "1.5.7-1",
+      "recipe": "zstd",
+      "sourceVersion": "1.5.7",
+      "license": "GPL-2.0"
+    }
+  ]
+}
