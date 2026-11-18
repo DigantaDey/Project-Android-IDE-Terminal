@@ -24,14 +24,26 @@ public final class NativePtyHostTest {
         return descriptor;
     }
 
+    private static byte[] readPipe(InputStream input) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] block = new byte[1024];
+        int count;
+        while ((count = input.read(block)) != -1) {
+            if (output.size() + count > 8192) throw new IOException("Raw fixture exceeded 8 KiB");
+            output.write(block, 0, count);
+        }
+        return output.toByteArray();
+    }
+
     private static void exerciseStdio() throws Exception {
         long[] process = NativePty.startStdio("/", new String[] { "/bin/bash", "--noprofile", "--norc", "-c", "test ! -t 0 && test ! -t 1 || exit 2; printf 'ERROR_ONLY\n' >&2; exec cat" }, new String[] { "PATH=/usr/bin:/bin", "HOME=/tmp" });
         byte[] expected = "Content-Length: 51\r\n\r\n{\"text\":\"বাংলা 🐍\"}\n\0\r\n".getBytes(StandardCharsets.UTF_8);
         try (FileOutputStream input = new FileOutputStream(descriptor(process[1])); FileInputStream output = new FileInputStream(descriptor(process[2])); FileInputStream error = new FileInputStream(descriptor(process[3]))) {
             input.write(expected);
             input.close(); // EOF is real, not terminal Ctrl-D or an echo/newline transformation.
-            byte[] actual = output.readAllBytes();
-            String stderr = new String(error.readAllBytes(), StandardCharsets.UTF_8);
+            // JDK 17's FileInputStream.readAllBytes seeks even for pipe FDs.
+            byte[] actual = readPipe(output);
+            String stderr = new String(readPipe(error), StandardCharsets.UTF_8);
             if (!java.util.Arrays.equals(expected, actual)) throw new AssertionError("Raw stdio corrupted Content-Length traffic");
             if (!stderr.equals("ERROR_ONLY\n")) throw new AssertionError("stderr leaked into protocol stdout: " + stderr);
             if (NativePty.waitFor((int) process[0]) != 0) throw new AssertionError("Raw stdio child failed");
