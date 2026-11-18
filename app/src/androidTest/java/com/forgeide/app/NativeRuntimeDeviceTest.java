@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.*;
 import java.util.zip.ZipFile;
 import org.junit.*;
 import org.junit.runner.RunWith;
@@ -444,6 +444,10 @@ public final class NativeRuntimeDeviceTest {
         CountDownLatch first = new CountDownLatch(1),
             after = new CountDownLatch(1);
         StringBuffer terminalOutput = new StringBuffer();
+        CountDownLatch initialPrompt = new CountDownLatch(1),
+            interruptedPrompt = new CountDownLatch(1);
+        AtomicInteger promptFrom = new AtomicInteger();
+        AtomicReference<CountDownLatch> promptWaiter = new AtomicReference<>(initialPrompt);
         NativeRuntimeClient.Run pty = start(
             "bash",
             "shellscript",
@@ -456,6 +460,9 @@ public final class NativeRuntimeDeviceTest {
             true,
             bytes -> {
                 terminalOutput.append(new String(bytes, StandardCharsets.UTF_8));
+                if (terminalOutput.substring(promptFrom.get()).contains(" $ ")) promptWaiter
+                    .get()
+                    .countDown();
                 if (terminalOutput.toString().contains("TTY_READY_42_32_100\r\n")) first.countDown();
                 if (terminalOutput.toString().contains("AFTER_INTERRUPT_42\r\n")) after.countDown();
             }
@@ -473,6 +480,9 @@ public final class NativeRuntimeDeviceTest {
                     .getNow("still running"),
             identity.get()
         );
+        // onReady acknowledges the fork/transport, not Bash's initial readline setup.
+        // Wait for actual prompt output before sending keys, and again after SIGINT.
+        assertTrue(terminalOutput.toString(), initialPrompt.await(20, TimeUnit.SECONDS));
         app.nativeRuntime.resize(pty, 32, 100);
         app.nativeRuntime.write(
             pty,
@@ -481,7 +491,10 @@ public final class NativeRuntimeDeviceTest {
             )
         );
         assertTrue(terminalOutput.toString(), first.await(20, TimeUnit.SECONDS));
+        promptFrom.set(terminalOutput.length());
+        promptWaiter.set(interruptedPrompt);
         app.nativeRuntime.write(pty, new byte[] { 3 });
+        assertTrue(terminalOutput.toString(), interruptedPrompt.await(20, TimeUnit.SECONDS));
         app.nativeRuntime.write(
             pty,
             "printf '\\x50\\x49\\x50\\x45_RESULT_'; printf '%d\\n' 42 | cat; printf '\\x41\\x46\\x54\\x45\\x52_INTERRUPT_%d\\n' \"$((6*7))\"\r".getBytes(
