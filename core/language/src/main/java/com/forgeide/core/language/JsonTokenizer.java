@@ -30,7 +30,11 @@ public class JsonTokenizer implements Tokenizer {
                 while (j < s.n && (s.text.charAt(j) == ' ' || s.text.charAt(j) == '\t')) {
                     j++;
                 }
-                s.emit(start, s.i, j < s.n && s.text.charAt(j) == ':' ? TokenType.PROPERTY : TokenType.STRING);
+                s.emit(
+                    start,
+                    s.i,
+                    j < s.n && s.text.charAt(j) == ':' ? TokenType.PROPERTY : TokenType.STRING
+                );
                 continue;
             }
             if (Scanner.isDigit(c) || c == '-') {

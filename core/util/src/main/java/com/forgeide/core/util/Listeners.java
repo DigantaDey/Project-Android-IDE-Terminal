@@ -8,6 +8,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * themselves while an event is being delivered).
  */
 public final class Listeners<T> {
+
     private final List<T> listeners = new CopyOnWriteArrayList<>();
 
     public void add(T listener) {

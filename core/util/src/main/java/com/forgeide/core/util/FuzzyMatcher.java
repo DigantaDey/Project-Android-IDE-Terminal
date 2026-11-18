@@ -11,10 +11,10 @@ import java.util.List;
  */
 public final class FuzzyMatcher {
 
-    private FuzzyMatcher() {
-    }
+    private FuzzyMatcher() {}
 
     public static final class Match {
+
         public final int score;
         public final List<int[]> ranges;
 
@@ -73,7 +73,7 @@ public final class FuzzyMatcher {
                 // extend current range
             } else {
                 if (rangeStart >= 0) {
-                    ranges.add(new int[]{rangeStart, lastMatchIndex + 1});
+                    ranges.add(new int[] { rangeStart, lastMatchIndex + 1 });
                 }
                 rangeStart = found;
             }
@@ -81,10 +81,10 @@ public final class FuzzyMatcher {
             ti = found + 1;
         }
         if (rangeStart >= 0) {
-            ranges.add(new int[]{rangeStart, lastMatchIndex + 1});
+            ranges.add(new int[] { rangeStart, lastMatchIndex + 1 });
         }
         // Shorter haystacks are preferred for equal quality
-        score = score * 100 / Math.max(t.length(), 1);
+        score = (score * 100) / Math.max(t.length(), 1);
         return new Match(score, ranges);
     }
 

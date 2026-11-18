@@ -14,11 +14,11 @@ import java.util.Map;
  */
 public final class Json {
 
-    private Json() {
-    }
+    private Json() {}
 
     /** A parse error carrying a precise source position. */
     public static final class JsonException extends RuntimeException {
+
         private final int offset;
         private final int line;
         private final int column;
@@ -91,6 +91,7 @@ public final class Json {
     // ------------------------------------------------------------------
 
     private static final class Parser {
+
         private final String text;
         private int pos;
         private int line = 1;
@@ -137,7 +138,11 @@ public final class Json {
 
         Object parseValue() {
             if (++depth > 128) throw error("JSON nesting exceeds 128 levels");
-            try { return parseValueInternal(); } finally { depth--; }
+            try {
+                return parseValueInternal();
+            } finally {
+                depth--;
+            }
         }
 
         private Object parseValueInternal() {
@@ -303,8 +308,13 @@ public final class Json {
         private String parseUnicodeEscape() {
             int first = readHex4();
             // Surrogate pair support
-            if (first >= 0xD800 && first <= 0xDBFF && pos + 1 < text.length()
-                    && text.charAt(pos) == '\\' && text.charAt(pos + 1) == 'u') {
+            if (
+                first >= 0xD800 &&
+                first <= 0xDBFF &&
+                pos + 1 < text.length() &&
+                text.charAt(pos) == '\\' &&
+                text.charAt(pos + 1) == 'u'
+            ) {
                 advance();
                 advance();
                 int second = readHex4();

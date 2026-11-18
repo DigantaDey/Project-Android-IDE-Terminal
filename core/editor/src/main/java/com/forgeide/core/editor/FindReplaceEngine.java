@@ -14,6 +14,7 @@ import java.util.regex.PatternSyntaxException;
 public final class FindReplaceEngine {
 
     public static final class Query {
+
         public final String pattern;
         public final boolean regex;
         public final boolean caseSensitive;
@@ -33,6 +34,7 @@ public final class FindReplaceEngine {
 
     /** A single match; {@code groups} holds regex capture groups (group 0 = full match). */
     public static final class Match {
+
         public final Range range;
         public final String[] groups;
 
@@ -114,7 +116,6 @@ public final class FindReplaceEngine {
         Matcher m = compile(query).matcher(new BoundedText(text, 500));
         while (out.size() < maxResults && m.find()) {
             out.add(toMatch(m));
-
         }
         return out;
     }
@@ -160,8 +161,11 @@ public final class FindReplaceEngine {
     private String resolveReplacementAt(Query query, Match match, String replacement) {
         if (!query.regex) return replacement;
         Matcher matcher = compile(query).matcher(new BoundedText(document.snapshot(), 500));
-        if (!matcher.find(match.range.start) || matcher.start() != match.range.start || matcher.end() != match.range.end)
-            throw new IllegalStateException("Search result is stale");
+        if (
+            !matcher.find(match.range.start) ||
+            matcher.start() != match.range.start ||
+            matcher.end() != match.range.end
+        ) throw new IllegalStateException("Search result is stale");
         StringBuffer buffer = new StringBuffer();
         matcher.appendReplacement(buffer, replacement);
         return buffer.substring(match.range.start);

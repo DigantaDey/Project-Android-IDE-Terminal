@@ -2,7 +2,6 @@ package com.forgeide.core.language;
 
 import com.forgeide.core.editor.AutoCloseEngine;
 import com.forgeide.core.editor.IndentRules;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -18,6 +17,7 @@ import java.util.regex.Pattern;
  * plugins without touching the editor core.
  */
 public final class Language {
+
     private final String id;
     private final String displayName;
     private final Set<String> extensions;
@@ -110,6 +110,7 @@ public final class Language {
     }
 
     public static final class Builder {
+
         private final String id;
         private final String displayName;
         private final Set<String> extensions = new LinkedHashSet<>();

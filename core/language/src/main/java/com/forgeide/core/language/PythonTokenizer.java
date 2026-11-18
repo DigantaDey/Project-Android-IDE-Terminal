@@ -90,8 +90,16 @@ public class PythonTokenizer implements Tokenizer {
 
     private static boolean isStringPrefix(String word) {
         String w = word.toLowerCase();
-        return w.equals("r") || w.equals("b") || w.equals("f") || w.equals("u")
-                || w.equals("rb") || w.equals("br") || w.equals("rf") || w.equals("fr");
+        return (
+            w.equals("r") ||
+            w.equals("b") ||
+            w.equals("f") ||
+            w.equals("u") ||
+            w.equals("rb") ||
+            w.equals("br") ||
+            w.equals("rf") ||
+            w.equals("fr")
+        );
     }
 
     private static void readPythonString(Scanner s) {

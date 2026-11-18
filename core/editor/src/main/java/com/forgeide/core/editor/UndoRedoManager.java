@@ -20,6 +20,7 @@ public final class UndoRedoManager implements Document.Listener {
     private Entry currentCompound;
 
     private static final class Entry {
+
         final java.util.List<TextChange> changes = new java.util.ArrayList<>();
         // Coalescing state of the most recent change
         boolean canMergeInsert;
@@ -96,9 +97,14 @@ public final class UndoRedoManager implements Document.Listener {
             }
             Entry top = undoStack.peek();
             if (top != null) {
-                if (change.isInsert() && !change.insertedText.contains("\n") && top.canMergeInsert
-                        && top.changes.get(top.changes.size() - 1).offset
-                        + top.changes.get(top.changes.size() - 1).insertedText.length() == change.offset) {
+                if (
+                    change.isInsert() &&
+                    !change.insertedText.contains("\n") &&
+                    top.canMergeInsert &&
+                    top.changes.get(top.changes.size() - 1).offset +
+                    top.changes.get(top.changes.size() - 1).insertedText.length() ==
+                    change.offset
+                ) {
                     top.add(change);
                     return;
                 }
@@ -106,8 +112,10 @@ public final class UndoRedoManager implements Document.Listener {
                     TextChange last = top.changes.get(top.changes.size() - 1);
                     // Backspace: deletes immediately before the previous deletion
                     // Delete-forward: deletes at the same offset
-                    if (change.offset + change.removedText.length() == last.offset
-                            || change.offset == last.offset) {
+                    if (
+                        change.offset + change.removedText.length() == last.offset ||
+                        change.offset == last.offset
+                    ) {
                         top.add(change);
                         return;
                     }

@@ -2,6 +2,7 @@ package com.forgeide.core.editor;
 
 /** A zero-based (line, column) position in a document. */
 public final class Position implements Comparable<Position> {
+
     public final int line;
     public final int column;
 

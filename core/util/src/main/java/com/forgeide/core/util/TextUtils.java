@@ -3,8 +3,7 @@ package com.forgeide.core.util;
 /** Common text helpers shared by editor, language and search modules. */
 public final class TextUtils {
 
-    private TextUtils() {
-    }
+    private TextUtils() {}
 
     /** Counts leading whitespace columns, expanding tabs to the given width. */
     public static int leadingWhitespaceColumns(String line, int tabSize) {
@@ -80,7 +79,7 @@ public final class TextUtils {
             }
         }
         if (tabLines > spaceLines) {
-            return new int[]{fallbackSize, 1};
+            return new int[] { fallbackSize, 1 };
         }
         int best = 4;
         int bestCount = 0;
@@ -90,7 +89,7 @@ public final class TextUtils {
                 best = d;
             }
         }
-        return new int[]{bestCount == 0 ? fallbackSize : best, 0};
+        return new int[] { bestCount == 0 ? fallbackSize : best, 0 };
     }
 
     /** Levenshtein edit distance, capped for performance on long strings. */
@@ -132,8 +131,18 @@ public final class TextUtils {
         }
         for (int i = 0; i < name.length(); i++) {
             char c = name.charAt(i);
-            if (c < 0x20 || c == '/' || c == '\\' || c == ':' || c == '*' || c == '?'
-                    || c == '"' || c == '<' || c == '>' || c == '|') {
+            if (
+                c < 0x20 ||
+                c == '/' ||
+                c == '\\' ||
+                c == ':' ||
+                c == '*' ||
+                c == '?' ||
+                c == '"' ||
+                c == '<' ||
+                c == '>' ||
+                c == '|'
+            ) {
                 return false;
             }
         }

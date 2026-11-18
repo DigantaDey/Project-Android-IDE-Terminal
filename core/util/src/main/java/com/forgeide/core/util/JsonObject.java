@@ -11,6 +11,7 @@ import java.util.Map;
  * have to sprinkle casts and null checks everywhere.
  */
 public final class JsonObject {
+
     private final Map<String, Object> map;
 
     public JsonObject(Map<String, Object> map) {
@@ -49,8 +50,7 @@ public final class JsonObject {
         if (v instanceof String) {
             try {
                 return Long.parseLong((String) v);
-            } catch (NumberFormatException ignored) {
-            }
+            } catch (NumberFormatException ignored) {}
         }
         return fallback;
     }
@@ -67,8 +67,7 @@ public final class JsonObject {
         if (v instanceof String) {
             try {
                 return Double.parseDouble((String) v);
-            } catch (NumberFormatException ignored) {
-            }
+            } catch (NumberFormatException ignored) {}
         }
         return fallback;
     }

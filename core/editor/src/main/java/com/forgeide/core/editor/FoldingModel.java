@@ -17,9 +17,11 @@ public final class FoldingModel {
 
     public synchronized void setRegions(List<FoldingRegion> newRegions) {
         regions = new ArrayList<>(newRegions);
-        Collections.sort(regions, (a, b) -> a.startLine != b.startLine
+        Collections.sort(regions, (a, b) ->
+            a.startLine != b.startLine
                 ? Integer.compare(a.startLine, b.startLine)
-                : Integer.compare(b.endLine, a.endLine)); // outer regions first
+                : Integer.compare(b.endLine, a.endLine)
+        ); // outer regions first
         // Drop folds that no longer correspond to a region.
         List<Integer> valid = new ArrayList<>();
         for (FoldingRegion r : regions) {

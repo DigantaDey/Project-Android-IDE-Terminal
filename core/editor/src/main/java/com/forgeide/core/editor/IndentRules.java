@@ -17,8 +17,12 @@ public final class IndentRules {
     /** Whether unclosed brackets on a line deepen indentation (C-style). */
     public final boolean bracketCounting;
 
-    public IndentRules(Pattern increaseIndent, Pattern decreaseIndent, Pattern dedentNext,
-                       boolean bracketCounting) {
+    public IndentRules(
+        Pattern increaseIndent,
+        Pattern decreaseIndent,
+        Pattern dedentNext,
+        boolean bracketCounting
+    ) {
         this.increaseIndent = increaseIndent;
         this.decreaseIndent = decreaseIndent;
         this.dedentNext = dedentNext;
@@ -27,20 +31,17 @@ public final class IndentRules {
 
     /** C/Java/JS-style brace language rules. */
     public static IndentRules braces() {
-        return new IndentRules(
-                Pattern.compile(".*[{(:]\\s*$"),
-                Pattern.compile("^[}\\])].*"),
-                null,
-                false);
+        return new IndentRules(Pattern.compile(".*[{(:]\\s*$"), Pattern.compile("^[}\\])].*"), null, false);
     }
 
     /** Python rules: ':' deepens, return/break/pass/raise dedent the following line. */
     public static IndentRules python() {
         return new IndentRules(
-                Pattern.compile(".*:\\s*(#.*)?$"),
-                Pattern.compile("^(return|break|pass|raise|continue|else|elif|except|finally)\\b.*"),
-                Pattern.compile("^\\s*(return|break|pass|raise|continue)\\b.*"),
-                false);
+            Pattern.compile(".*:\\s*(#.*)?$"),
+            Pattern.compile("^(return|break|pass|raise|continue|else|elif|except|finally)\\b.*"),
+            Pattern.compile("^\\s*(return|break|pass|raise|continue)\\b.*"),
+            false
+        );
     }
 
     /** No smart indentation: just copy the previous line's indent. */

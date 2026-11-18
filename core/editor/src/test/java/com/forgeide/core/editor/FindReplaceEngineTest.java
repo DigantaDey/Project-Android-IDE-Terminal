@@ -1,10 +1,9 @@
 package com.forgeide.core.editor;
 
-import org.junit.Test;
+import static org.junit.Assert.*;
 
 import java.util.List;
-
-import static org.junit.Assert.*;
+import org.junit.Test;
 
 public class FindReplaceEngineTest {
 
@@ -41,8 +40,10 @@ public class FindReplaceEngineTest {
     @Test
     public void regexQueryWithGroups() {
         FindReplaceEngine e = engine("foo(12) foo(345)");
-        List<FindReplaceEngine.Match> matches =
-                e.findAll(new FindReplaceEngine.Query("foo\\((\\d+)\\)", true, true, false), 10);
+        List<FindReplaceEngine.Match> matches = e.findAll(
+            new FindReplaceEngine.Query("foo\\((\\d+)\\)", true, true, false),
+            10
+        );
         assertEquals(2, matches.size());
         assertEquals("12", matches.get(0).groups[1]);
         assertEquals("345", matches.get(1).groups[1]);
@@ -75,8 +76,10 @@ public class FindReplaceEngineTest {
     public void replaceWithGroupReference() {
         Document doc = new Document("hello world");
         FindReplaceEngine e = new FindReplaceEngine(doc);
-        List<FindReplaceEngine.Match> matches =
-                e.findAll(new FindReplaceEngine.Query("(hello) (world)", true, true, false), 10);
+        List<FindReplaceEngine.Match> matches = e.findAll(
+            new FindReplaceEngine.Query("(hello) (world)", true, true, false),
+            10
+        );
         e.replace(new FindReplaceEngine.Query("(hello) (world)", true, true, false), matches.get(0), "$2 $1");
         assertEquals("world hello", doc.text());
     }
@@ -97,8 +100,10 @@ public class FindReplaceEngineTest {
     @Test
     public void zeroWidthRegexDoesNotLoop() {
         FindReplaceEngine e = engine("abc");
-        List<FindReplaceEngine.Match> matches =
-                e.findAll(new FindReplaceEngine.Query("x*", true, true, false), 100);
+        List<FindReplaceEngine.Match> matches = e.findAll(
+            new FindReplaceEngine.Query("x*", true, true, false),
+            100
+        );
         assertTrue(matches.size() < 100);
     }
 }

@@ -1,7 +1,6 @@
 package com.forgeide.core.editor;
 
 import com.forgeide.core.util.Listeners;
-
 import java.util.ArrayList;
 import java.util.List;
 

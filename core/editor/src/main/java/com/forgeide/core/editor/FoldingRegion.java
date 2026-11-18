@@ -2,6 +2,7 @@ package com.forgeide.core.editor;
 
 /** A foldable region of lines. endLine is inclusive; the first line stays visible. */
 public final class FoldingRegion {
+
     public final int startLine;
     public final int endLine;
     public final String kind; // "braces", "indent", "comment", "region", "tag", "heading"

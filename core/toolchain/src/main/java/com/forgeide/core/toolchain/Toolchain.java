@@ -14,5 +14,12 @@ public interface Toolchain {
     Set<SandboxPolicy.Restriction> restrictions();
     boolean available();
     String availabilityMessage();
-    CompletableFuture<Integer> run(String source, RunConfiguration configuration, SandboxPolicy policy, CancellationToken cancel, Consumer<String> stdout, Consumer<String> stderr);
+    CompletableFuture<Integer> run(
+        String source,
+        RunConfiguration configuration,
+        SandboxPolicy policy,
+        CancellationToken cancel,
+        Consumer<String> stdout,
+        Consumer<String> stderr
+    );
 }

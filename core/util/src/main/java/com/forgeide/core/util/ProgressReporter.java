@@ -4,8 +4,7 @@ package com.forgeide.core.util;
 public interface ProgressReporter {
     ProgressReporter NONE = new ProgressReporter() {
         @Override
-        public void onProgress(int completed, int total, String message) {
-        }
+        public void onProgress(int completed, int total, String message) {}
     };
 
     /**

@@ -108,8 +108,15 @@ public class JsTokenizer implements Tokenizer {
 
     private static boolean isRegexContext(char prev) {
         // After these, a '/' starts a regex rather than a division
-        return prev == 0 || prev == 'o' || prev == ';' || prev == '(' || prev == '{' || prev == '['
-                || prev == '!';
+        return (
+            prev == 0 ||
+            prev == 'o' ||
+            prev == ';' ||
+            prev == '(' ||
+            prev == '{' ||
+            prev == '[' ||
+            prev == '!'
+        );
     }
 
     /** Reads /pattern/flags. Returns false if it doesn't terminate as a regex. */

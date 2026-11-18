@@ -20,7 +20,7 @@ public final class AutoCloseEngine {
         /** The closing character already exists at the caret: just move past it. */
         OVERTYPE,
         /** Typing the closing quote at a position before an identical quote should overtype. */
-        OVERTYPE_QUOTE
+        OVERTYPE_QUOTE,
     }
 
     private final Map<Character, Character> pairs;
@@ -80,8 +80,12 @@ public final class AutoCloseEngine {
             }
             // Only auto-close a quote when it looks like an opening position:
             // previous char is whitespace, an opening bracket, an operator, or nothing.
-            if (prev == '\0' || Character.isWhitespace(prev) || isOpening(prev)
-                    || "=(:,[!&|?;{}+-*/%^~<>".indexOf(prev) >= 0) {
+            if (
+                prev == '\0' ||
+                Character.isWhitespace(prev) ||
+                isOpening(prev) ||
+                "=(:,[!&|?;{}+-*/%^~<>".indexOf(prev) >= 0
+            ) {
                 // And the following char must not be a word character.
                 if (next == '\0' || !isWordChar(next)) {
                     return Action.INSERT_PAIR;

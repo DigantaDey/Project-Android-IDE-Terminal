@@ -112,8 +112,13 @@ public class MarkupTokenizer implements Tokenizer {
             }
             int before = s.i;
             s.mark(TokenType.ATTRIBUTE);
-            while (!s.atEnd() && !Character.isWhitespace(s.peek())
-                    && s.peek() != '=' && s.peek() != '>' && s.peek() != '/') {
+            while (
+                !s.atEnd() &&
+                !Character.isWhitespace(s.peek()) &&
+                s.peek() != '=' &&
+                s.peek() != '>' &&
+                s.peek() != '/'
+            ) {
                 s.advance();
             }
             if (s.i == before) s.advance();

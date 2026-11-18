@@ -1,11 +1,10 @@
 package com.forgeide.core.util;
 
-import org.junit.Test;
+import static org.junit.Assert.*;
 
 import java.util.List;
 import java.util.Map;
-
-import static org.junit.Assert.*;
+import org.junit.Test;
 
 public class JsonTest {
 
@@ -27,7 +26,7 @@ public class JsonTest {
         assertTrue(v instanceof Map);
         @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) v;
-        assertArrayEquals(new String[]{"b", "a"}, map.keySet().toArray(new String[0]));
+        assertArrayEquals(new String[] { "b", "a" }, map.keySet().toArray(new String[0]));
         @SuppressWarnings("unchecked")
         List<Object> arr = (List<Object>) map.get("a");
         assertEquals(3, arr.size());
@@ -57,8 +56,20 @@ public class JsonTest {
 
     @Test
     public void rejectsInvalidDocuments() {
-        String[] bad = {"{", "[1,", "{\"a\"}", "{\"a\":}", "{'x':1}", "\"unterminated", "01x", "{]",
-                "\"bad\\xescape\"", "tru", "[1 2]", ""};
+        String[] bad = {
+            "{",
+            "[1,",
+            "{\"a\"}",
+            "{\"a\":}",
+            "{'x':1}",
+            "\"unterminated",
+            "01x",
+            "{]",
+            "\"bad\\xescape\"",
+            "tru",
+            "[1 2]",
+            "",
+        };
         for (String doc : bad) {
             try {
                 Json.parse(doc);
@@ -86,7 +97,10 @@ public class JsonTest {
 
     @Test
     public void roundTrips() {
-        String pretty = Json.writePretty(Json.parse("{\"name\":\"x\",\"tags\":[\"a\",\"b\"],\"n\":5,\"ok\":true}"), 2);
+        String pretty = Json.writePretty(
+            Json.parse("{\"name\":\"x\",\"tags\":[\"a\",\"b\"],\"n\":5,\"ok\":true}"),
+            2
+        );
         Object reparsed = Json.parse(pretty);
         assertEquals(Json.parse("{\"name\":\"x\",\"tags\":[\"a\",\"b\"],\"n\":5,\"ok\":true}"), reparsed);
         assertTrue(pretty.contains("\n"));
@@ -102,8 +116,10 @@ public class JsonTest {
 
     @Test
     public void jsonObjectAccessorIsForgiving() {
-        JsonObject o = JsonObject.parse("{\"s\":\"v\",\"n\":3,\"d\":2.5,\"b\":true,"
-                + "\"arr\":[\"a\",1],\"obj\":{\"x\":1},\"strNum\":\"42\"}");
+        JsonObject o = JsonObject.parse(
+            "{\"s\":\"v\",\"n\":3,\"d\":2.5,\"b\":true," +
+                "\"arr\":[\"a\",1],\"obj\":{\"x\":1},\"strNum\":\"42\"}"
+        );
         assertEquals("v", o.getString("s", "?"));
         assertEquals(3, o.getInt("n", 0));
         assertEquals(2.5, o.getDouble("d", 0), 0.0001);

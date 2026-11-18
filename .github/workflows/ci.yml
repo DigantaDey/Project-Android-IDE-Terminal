@@ -65,7 +65,7 @@ jobs:
           script: bash scripts/device-tests.sh
       - name: Annotate device failures
         if: failure()
-        run: python3 scripts/ci-diagnostics.py device-ci.log
+        run: python3 scripts/ci-diagnostics.py device-ci.log app/build/outputs/androidTest-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:

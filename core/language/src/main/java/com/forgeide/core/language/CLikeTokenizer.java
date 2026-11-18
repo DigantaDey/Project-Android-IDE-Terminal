@@ -14,8 +14,12 @@ public class CLikeTokenizer implements Tokenizer {
     private final boolean preprocessor;
     private final boolean annotations;
 
-    public CLikeTokenizer(Set<String> keywords, Set<String> builtins,
-                          boolean preprocessor, boolean annotations) {
+    public CLikeTokenizer(
+        Set<String> keywords,
+        Set<String> builtins,
+        boolean preprocessor,
+        boolean annotations
+    ) {
         this.keywords = keywords;
         this.builtins = builtins;
         this.preprocessor = preprocessor;
