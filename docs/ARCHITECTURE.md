@@ -75,3 +75,29 @@ No server executable is bundled. A future transport must isolate its server, enf
 ## Conventions
 
 Use explicit, actionable error states. Do not catch a failure and present successful build/install output. Preserve recovery/backups on failure. Keep generated artifacts and credentials out of version control. Pin dependencies; run core tests, Android compile/lint, and device integration before merging. Formatting is configured by `.editorconfig` and `.prettierrc.json`.
+
+## Optional offline native companion
+
+`native-runtime` is a separate application (`com.forgex`) with a distinct regular
+Android UID and explicit target-28 compatibility mode; `app` stays target 35.
+`runtime-api` carries a bounded snapshot FD, launch bundle, PTY byte I/O/resize,
+termination, and explicit project-copy export. Both packages verify the same
+signature, expected UID/protocol and reviewed package-lock ID. Native switches are
+global consent, never project overrides. Cancellation is serialized with the start
+RPC, and late run IDs cannot stop a new run.
+
+`native-bundle.py` constructs APK assets from SHA256-locked Android/bionic package
+inputs at build time. Payload/file hashes and bounded install paths are verified
+before publishing the prefix. No maintainer script or runtime downloader runs on
+the phone. The JNI PTY launcher exists only in the companion; the IDE's vendored
+Apache-2.0 terminal renderer uses a remote-only session adapter and cannot fork.
+The companion starts children with only PTY FDs and an explicit environment,
+network seccomp filtering when off, and basic RLIMITs. Its UID is shared between
+native tools, and no aggregate hard CPU/memory quota is claimed.
+
+Native launches receive copies (32 MiB/2,000 entries), not mounts or project URI
+capabilities. Changes and npm installations remain in the PTY copy until exit,
+with explicit bounded ZIP export; no automatic IDE import/write-back. One native
+run/PTY is active at once. Activity recreation retains the terminal renderer and
+remote session in application state; Android process death is not process restore.
+See [NATIVE_RUNTIME.md](NATIVE_RUNTIME.md) for operational and security limits.

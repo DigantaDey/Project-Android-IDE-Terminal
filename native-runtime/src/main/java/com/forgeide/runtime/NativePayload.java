@@ -94,10 +94,13 @@ final class NativePayload {
     @SuppressWarnings("unchecked")
     synchronized void ensure() throws Exception {
         if (!supported()) throw new IOException("Native runtime supports arm64-v8a and x86_64 only");
+        // Android may bind-mount /data/data and /data/user/0 rather than symlinking them.
+        // Compare inode identity, not canonical path text; secondary users still fail closed.
         if (
-            !new File("/data/data/" + NativeTools.PACKAGE + "/files")
-                .getCanonicalFile()
-                .equals(context.getFilesDir().getCanonicalFile())
+            !Files.isSameFile(
+                new File("/data/data/" + NativeTools.PACKAGE + "/files").toPath(),
+                context.getFilesDir().toPath()
+            )
         ) throw new IOException(
             "This compatibility runtime requires Android's primary user; secondary/work-profile paths are unsupported"
         );

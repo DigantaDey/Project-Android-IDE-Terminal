@@ -1,6 +1,6 @@
 # Capability matrix
 
-This document describes the code that is shipped, not a roadmap disguised as installed functionality. The app's **Toolchains & dependencies** screen uses the same conservative boundary.
+This document describes the code that is shipped, not a roadmap disguised as installed functionality. The optional offline native companion is installed separately and all its tool switches default off; see [setup, compatibility and security](NATIVE_RUNTIME.md). The app's **Toolchains & dependencies** screen uses the same conservative boundary.
 
 ## Language support
 
@@ -8,18 +8,18 @@ All languages below have offline tokenization/syntax colors, word/keyword comple
 
 | Language | Additional bundled behavior | Local execution / debugging |
 | --- | --- | --- |
-| C / C++ | Brace indentation/pairs, comment commands, heuristic declarations/folds | No Clang/GCC, native runtime, GDB, or LLDB installed |
+| C / C++ | Brace indentation/pairs, comment commands, heuristic declarations/folds | Clang/Clang++ + LLD and C/C++ headers/runtime in the opt-in native companion; no GDB/LLDB debugger |
 | Java | Brace indentation/pairs, comment commands, heuristic declarations/folds | No Java compiler/runtime provider installed; the app's own Android runtime is not a user-code toolchain |
-| JavaScript | Brace indentation/pairs, parser diagnostics/syntax check, heuristic symbols | Interpreted Rhino ES6 in an isolated service; real stepping, conditions, stack/variables, watches |
+| JavaScript | Brace indentation/pairs, parser diagnostics/syntax check, heuristic symbols | Isolated Rhino ES6 with real debugging; opt-in native Node.js/CommonJS/filesystem in the separate companion (no Node debugger) |
 | TypeScript | JS-family tokenization and TS keywords, lexical declarations | No TS compiler, Node.js, module resolver, or TS language server installed |
-| Python | Python tokenization, colon indentation, comments, heuristic declarations/folds | No Python interpreter, pip, debugpy, or semantic provider installed |
+| Python | Python tokenization, colon indentation, comments, heuristic declarations/folds | CPython standard library in the opt-in native companion; no pip, debugpy or semantic provider installed |
 | HTML | Markup and embedded CSS/JS colors | Static offline preview when Android WebView is available; otherwise an explicit native unavailable state; scripts stay disabled |
 | CSS | CSS tokens, brace indentation | Rendered by the static HTML preview; no Sass/PostCSS toolchain |
 | JSON | Bounded validation and layout formatting that preserves string/number lexemes | Data only; duplicate keys, excessive nesting, and non-finite parsed numbers rejected |
 | XML | Markup tokens | No schema validator, transformer, or external entity resolution |
 | Markdown | Headings, links, emphasis, fenced code colors | Edited as text; no executable notebooks or HTML bridge |
 | SQL | SQL keywords, quoted/comment-aware splitting (including trigger bodies) | bundled AndroidX SQLite, in-memory per run; no file database attach or interactive debugger |
-| Shell / Bash | Shell tokens/keywords and comments | Shell files are editable, not executed; the project command panel is not Bash |
+| Shell / Bash | Shell tokens/keywords and comments | Opt-in native Bash file execution and a real ANSI PTY; the existing scoped project command panel remains distinct |
 | Kotlin | Kotlin keywords, brace indentation | No Kotlin compiler/provider installed |
 
 JSON formatting is full layout formatting. For other languages, **Format** only cleans trailing whitespace and reports that limitation. Local declarations and textual references can produce false positives and do not resolve scopes, imports, overloads, or types. Semantic completion, hover, rename, references, and diagnostics require a compatible LSP provider; the framed protocol client is implemented, but no server is installed.
@@ -42,14 +42,18 @@ JSON formatting is full layout formatting. For other languages, **Format** only 
 
 | Area | Available | Boundary |
 | --- | --- | --- |
-| JavaScript | Real interpreted code, argv, explicit environment object, initial `readLine()` input, stdout/stderr reporting, exit status, deadline/output bounds, cancellation | Rhino ES6 is not full modern browser JS or Node.js. No `require`, `process`, npm, modules, DOM, host filesystem, Java/Android interop, or network |
+| JavaScript (isolated Rhino) | Real interpreted code, argv, explicit environment object, initial `readLine()` input, stdout/stderr reporting, exit status, deadline/output bounds, cancellation | Rhino ES6 is not full modern browser JS or Node.js. No `require`, `process`, npm, modules, DOM, host filesystem, Java/Android interop, or network |
 | SQLite | Real SQL statements and query results, foreign keys, memory-only temporary store, row/cell/output limits | Ephemeral database; no ATTACH/DETACH or project-file I/O; native SQLite memory work is bounded by watchdog, not a hard memory quota |
 | Debugging | JS conditional breakpoints (set before launch), initial pause, step into/over/out, continue/pause, variables/stack, watch evaluation and source navigation | JS provider only; debug deadline includes pauses and cannot exceed the effective global/project ceiling. Watch expressions execute in the program's isolated scope and may have side effects |
 | Run configs | `.forge/run.json`: file, arguments, environment, working-directory validation, initial stdin, command arrays | Built-in interpreters do not execute arbitrary command arrays. Configured providers must match the file language; cwd must exist but is logical only for bundled interpreters (no filesystem API) |
-| Project shell | Up to six sessions; cwd/env, argument parsing, variable expansion, real scoped file commands, history/transcript/search, trusted Git read commands, isolated `run` | Not a PTY/ANSI terminal; no pipes, redirects, arbitrary executables, native job control, package managers, or restorable OS processes |
-| Packages/tools | Availability and restrictions shown explicitly; modular provider interfaces | No silent installs, no built-in dependency installer, and no desktop binaries assumed runnable on Android |
+| Project shell (scoped) | Up to six sessions; cwd/env, argument parsing, variable expansion, real scoped file commands, history/transcript/search, trusted Git read commands, isolated `run` | Not a PTY/ANSI terminal; no pipes, redirects, arbitrary executables, native job control, package managers, or restorable OS processes |
+| Native companion | Real C/C++ compilation/execution, CPython, Node.js/npm, Bash PTY, Make; per-tool global on/off controls; project-copy ZIP export | Separate regular app UID, target-28 compatibility, primary-user 64-bit ABI only; one native run/PTY; no automatic write-back; copies/session changes are ephemeral |
+| Packages/tools | APK-bundled Android/bionic inputs; real npm offline local installs, optional user-enabled network and lifecycle scripts | No hidden installs; native add-ons can need extra Android-specific tools/patches. No pip/Java SDK/CMake or desktop-binary compatibility assumed |
 
-## Isolation guarantees and limits
+## Built-in isolated-interpreter guarantees and limits
+
+The table below applies to the existing Rhino/SQLite service, not the optional native companion. Native programs can create processes, access companion-UID files and, with explicit consent, network. The IDE credentials/private storage remain a different Android UID. Native tool switches control Forge entry points and normal PTY command discovery; they are not an absolute-path security boundary. See [NATIVE_RUNTIME.md](NATIVE_RUNTIME.md) for the separate regular-UID/legacy compatibility policy.
+
 
 | Requirement | Built-in behavior |
 | --- | --- |
@@ -72,4 +76,4 @@ Not implemented: SSH keys/agent, signed commits, native hooks, LFS processes, cr
 
 ## Verification scope
 
-Core behavior has automated JUnit coverage; Android build/lint and API 26/29 phone + API 35 tablet emulator integration are separate CI checks. Device tests cover native editing/recreation/recovery, actual local Git and disabled hooks, Keystore round trips, runtime identity/permission behavior, deadlines, cancel/rerun, SQLite, and strict-policy refusal. Read the result of the **specific commit's CI run** rather than assuming a feature was tested on every phone, tablet, foldable, API level, or OEM ROM.
+Core behavior has automated JUnit coverage; Android build/lint and API 26/29 phone + API 35 tablet emulator integration are separate CI checks. Device tests cover native editing/recreation/recovery, actual local Git and disabled hooks, Keystore round trips, runtime identity/permission behavior, deadlines, cancel/rerun, SQLite, and strict-policy refusal. Additional companion tests execute actual C/C++ compilation, CPython stdin/Unicode argv and filesystem/socket denials, Node CommonJS/filesystem calls, an offline npm local dependency with installation scripts disabled, native deadlines/cancellation/rerun, real PTY input/Ctrl-C/resize and terminal Activity recreation. No external registry/network request is needed by these tests. Read the result of the **specific commit's CI run** rather than assuming a feature was tested on every phone, tablet, foldable, API level, or OEM ROM.

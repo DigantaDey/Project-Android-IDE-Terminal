@@ -23,7 +23,8 @@ def verified_download(url, sha256, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".partial")
     try:
-        with urllib.request.urlopen(url, timeout=120) as response, temporary.open("wb") as output:
+        request = urllib.request.Request(url, headers={"User-Agent": "curl/8.5.0"})
+        with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as output:
             digest = hashlib.sha256()
             size = 0
             while block := response.read(65536):
@@ -50,7 +51,10 @@ def build(index_path, output):
         name = record["filename"]
         if "/" in name or "\\" in name or name.startswith("."):
             raise ValueError("Invalid source filename")
-        verified_download(record["url"], record["sha256"], output / "upstream" / name)
+        try:
+            verified_download(record["url"], record["sha256"], output / "upstream" / name)
+        except Exception as error:
+            raise ValueError("Could not obtain corresponding source " + name + " from " + record["url"] + ": " + str(error)) from error
     shutil.copyfile(index_path, output / "source-lock.json")
     shutil.copyfile(ROOT / "tools/native/runtime-lock.json", output / "native-package-lock.json")
     subprocess.run(["git", "archive", "--format=tar.gz", "--output=" + str((output / "forge-integration-source.tar.gz").resolve()), "HEAD"], cwd=ROOT, check=True)
