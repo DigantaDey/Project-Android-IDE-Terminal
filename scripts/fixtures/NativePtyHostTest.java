@@ -18,7 +18,7 @@ public final class NativePtyHostTest {
         long[] process = NativePty.start(
             "/",
             new String[] { "/bin/bash", "--noprofile", "--norc", "-i" },
-            new String[] { "PATH=/usr/bin:/bin", "HOME=/tmp", "TERM=xterm", "PS1=forge $ " },
+            new String[] { "PATH=/usr/bin:/bin", "HOME=/tmp", "HISTFILE=/dev/null", "TERM=xterm", "PS1=forge $ " },
             24, 80, false
         );
         // Same descriptor ownership rules as Android's duplicated PFD streams, without android.jar.

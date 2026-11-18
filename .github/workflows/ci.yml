@@ -36,7 +36,13 @@ jobs:
         run: |
           npm ci --prefix tools/format --ignore-scripts --no-audit --no-fund
           npm --prefix tools/format run check
+      - name: Give native host PTY tests their own unprivileged UID
+        # RLIMIT_NPROC is per UID, not per process. The runner user's .NET/Node
+        # threads would consume Android's 64-task app-UID budget before Bash starts.
+        run: sudo useradd --system --no-create-home --shell /usr/sbin/nologin forge-native-test
       - name: Test CI report helpers and real native host launcher
+        env:
+          FORGE_NATIVE_HOST_TEST_USER: forge-native-test
         run: |
           set -o pipefail
           python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee host-tests-ci.log
