@@ -68,7 +68,7 @@ public final class ExecutionService extends Service {
                                 "isolated",
                                 android.os.Process.myUid() != getApplicationInfo().uid,
                                 "hostFilesReadable",
-                                getFilesDir().canRead(),
+                                new File(getApplicationInfo().dataDir, "state").canRead(),
                                 "networkPermission",
                                 checkSelfPermission(android.Manifest.permission.INTERNET) ==
                                     android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -147,8 +147,15 @@ public final class ExecutionService extends Service {
                     );
                     callback.onFinished(result.exitCode, result.error, result.line, result.column);
                 } catch (Exception e) {
+                    android.util.Log.e("ForgeRuntime", "Isolated execution failed", e);
                     try {
-                        callback.onFinished(1, String.valueOf(e.getMessage()), 0, 0);
+                        String detail = android.util.Log.getStackTraceString(e);
+                        callback.onFinished(
+                            1,
+                            detail.length() > 8000 ? detail.substring(0, 8000) : detail,
+                            0,
+                            0
+                        );
                     } catch (RemoteException ignored) {}
                 } finally {
                     running = false;

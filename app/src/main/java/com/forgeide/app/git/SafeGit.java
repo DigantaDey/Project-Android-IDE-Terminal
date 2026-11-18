@@ -26,6 +26,10 @@ public final class SafeGit implements GitService {
             return new NoExecFS();
         }
 
+        // Android uses Unix dot-file names; java.nio's DOS attribute view is unavailable.
+        @Override
+        public void setHidden(File path, boolean hidden) {}
+
         @Override
         public boolean supportsExecute() {
             return false;
