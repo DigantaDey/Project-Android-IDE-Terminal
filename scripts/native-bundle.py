@@ -59,15 +59,20 @@ def signed_index(arch):
         if check.returncode:
             raise ValueError("Catalog signature verification failed: " + check.stderr)
         text = verified.read_text()
-    relative = "main/binary-" + arch + "/Packages.xz"
     section = text.split("SHA256:\n", 1)[1].split("\n\n", 1)[0]
-    match = re.search(r"^\s*([a-f0-9]{64})\s+(\d+)\s+" + re.escape(relative) + r"$", section, re.M)
+    match = None
+    for suffix in (".xz", ".gz", ""):
+        relative = "main/binary-" + arch + "/Packages" + suffix
+        match = re.search(r"^\s*([a-f0-9]{64})\s+(\d+)\s+" + re.escape(relative) + r"$", section, re.M)
+        if match:
+            break
     if not match:
-        raise ValueError("Signed release has no SHA256 for " + relative)
+        raise ValueError("Signed release has no SHA256 for package index: " + text[-1800:])
     compressed = fetch(MIRROR + "dists/stable/" + relative, 32 * 1024 * 1024)
     if len(compressed) != int(match[2]) or hashlib.sha256(compressed).hexdigest() != match[1]:
         raise ValueError("Signed package-index checksum mismatch")
-    return paragraphs(lzma.decompress(compressed).decode()), hashlib.sha256(release).hexdigest()
+    plain = lzma.decompress(compressed) if suffix == ".xz" else gzip.decompress(compressed) if suffix == ".gz" else compressed
+    return paragraphs(plain.decode()), hashlib.sha256(release).hexdigest()
 
 
 def resolve(packages, roots):
