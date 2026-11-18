@@ -52,6 +52,25 @@ public final class NativeTools {
         }
     }
 
+    /** Controls ordinary PTY command discovery, not an absolute-path or programmable-code ban. */
+    public static String commandTool(String name) {
+        if (
+            name.startsWith("python") ||
+            name.startsWith("pydoc") ||
+            name.startsWith("idle") ||
+            name.equals("2to3")
+        ) return "python";
+        if (name.equals("node") || name.equals("nodejs")) return "node";
+        if (name.equals("npm") || name.equals("npx")) return "npm";
+        if (name.equals("bash") || name.equals("sh") || name.equals("dash")) return "bash";
+        if (
+            name.startsWith("clang") ||
+            name.startsWith("llvm-") ||
+            Set.of("cc", "c++", "cpp", "gcc", "g++", "ld", "ld.lld", "lld", "llc", "opt").contains(name)
+        ) return "clang";
+        return "";
+    }
+
     public static void relativePath(String path, boolean allowEmpty) {
         if (
             path == null ||

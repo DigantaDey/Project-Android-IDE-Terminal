@@ -4,14 +4,18 @@
 
 Projects, source programs, Git metadata/remotes, archives, regular expressions, shared content URIs, and future language-server output can be untrusted. The IDE itself, Android OS, bundled dependencies, and enabled provider implementations are trusted. Rooted/compromised devices, Android/interpreter vulnerabilities, malicious keyboards/accessibility services, and a user intentionally exporting a secret are outside the app's guarantees.
 
-**Do not treat this app as a hardened native-code container.** The built-in interpreters have no project/host filesystem API. Adding arbitrary native executables requires a new security design, not permission to fall back to the app UID.
+**Do not treat this app as a hardened native-code container.** The built-in interpreters have no project/host filesystem API. Optional arbitrary native executables use the separately installed companion design below, never a fallback to the IDE UID.
 
 ## Trust domains
 
-1. **Trusted app UID:** private projects, editor state, settings, recovery, Git/network requests, Android Keystore. Its only manifest permission is INTERNET; there is no broad storage, root, camera, microphone, contacts, location, or all-files permission.
+1. **Trusted app UID:** private projects, editor state, settings, recovery, Git/network requests, Android Keystore. Its only platform manifest permission is INTERNET (plus its own signature-only companion RPC permission); there is no broad storage, root, camera, microphone, contacts, location, or all-files permission.
 2. **Project command authority:** the virtual shell uses a confined `Workspace`. It does not receive the app's state/recovery/vault directories and never invokes a host shell. It is trusted IDE functionality operating on explicit project data—not an unrestricted native shell.
 3. **Untrusted execution UID:** the non-exported `ExecutionService` has `isolatedProcess=true`. Android gives it a separate ephemeral UID without the app's inherited permissions or app-private storage. Only bounded source bytes and explicit launch data are passed to it. It verifies Binder callers against the app UID.
 4. **Static WebView renderer:** no JavaScript, native bridge, file/content access, external network, geolocation, or database storage. Confined resources are intercepted under a synthetic HTTPS origin with a restrictive CSP. A missing/broken provider or renderer failure shows a native unavailable state rather than crashing the editor, weakening settings, downloading a browser, or opening an external URL.
+
+5. **Optional native companion UID:** the separately installed `com.forgex` app deliberately targets API 28 for legacy native-executable compatibility. It is a regular application UID, not `isolatedProcess`, and shares no UID/data directory with the IDE. Signature permission, host calling-UID, protocol and package-lock checks authenticate Binder calls. Only a bounded, metadata-filtered disposable project copy and explicit launch data cross IPC; no host credentials, live project paths or SAF grants reach the native child. Tool flags default off, are global-only, stop active native work when changed and filter normal command discovery. They cannot ban absolute-path access or alternative interpreters inside a programmable shell. Native languages share the companion's trust domain with each other.
+
+Native networking is separately consented, default off, and blocked in children by inherited seccomp socket filtering when off. Failure to install restrictions prevents exec. Only PTY descriptors and sanitized explicit environment survive into the child; the native child cannot ptrace/process_vm-inspect its parent. Compiler subprocesses/job control are allowed, and stop/deadline sweeps native companion-UID jobs, never IDE-UID processes. Basic RLIMITs are not aggregate CPU/memory/disk quotas. File-run and PTY copies are ephemeral and never silently written back to the IDE; export is an explicit SAF operation by trusted companion Java code. See [the full native threat model and installation limitations](NATIVE_RUNTIME.md). This compatibility app is not a hardened Linux container or a Play-ready release.
 
 ## Execution restrictions
 
@@ -32,7 +36,7 @@ The interpreter deadline, service main-thread watchdog, and host deadline are in
 - Regex: bounded character access, time checks, enumeration/capture limits, and cancellation/interruption, instead of unbounded backtracking or match-metadata allocation. Replace-all is single-pass, validates expansion size before allocation, and applies no partial edit on invalid templates/oversized output.
 - Git diff: 1 MiB text/binary threshold and a 256 KiB output buffer; repository metadata cannot disable TLS/redirect policy or use external credential/cookie/certificate files.
 
-**Hard process memory ceilings, CPU-share quotas, and a general native syscall/container policy are not implemented.** Android may kill the isolated process under pressure, but a malicious allocation can still affect device responsiveness before termination. The strict hard-limit setting refuses execution rather than falsely promising a quota. Network/process/filesystem access cannot be enabled for the built-in providers merely by editing run JSON.
+**Hard process memory ceilings, CPU-share quotas, and a general native syscall/container policy are not implemented.** Android may kill the isolated process under pressure, but a malicious allocation can still affect device responsiveness before termination. The strict hard-limit setting refuses execution rather than falsely promising a quota. Network/process/filesystem access cannot be enabled for the built-in isolated-interpreter providers merely by editing run JSON. Native permission/launch consent also cannot be enabled by imported project settings, and strict hard-limit requirements reject native execution too.
 
 ## Credentials and network
 

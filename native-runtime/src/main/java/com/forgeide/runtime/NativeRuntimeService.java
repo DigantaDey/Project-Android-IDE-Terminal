@@ -246,7 +246,20 @@ public final class NativeRuntimeService extends Service {
             Map<String, String> env = NativeTools.environment(requested);
             String prefix = payload.prefix.toString();
             Path home = Files.createDirectory(s.root.resolve("home"));
-            env.put("PATH", prefix + "/bin");
+            Path commands = Files.createDirectory(s.root.resolve("bin"));
+            Set<String> enabled = new HashSet<>(Arrays.asList(options.getStringArray("enabled")));
+            try (DirectoryStream<Path> binaries = Files.newDirectoryStream(payload.prefix.resolve("bin"))) {
+                for (Path binary : binaries) {
+                    String name = binary.getFileName().toString();
+                    String owner = NativeTools.commandTool(name);
+                    if (
+                        !owner.isEmpty() &&
+                        (!enabled.contains(owner) || (owner.equals("npm") && !enabled.contains("node")))
+                    ) continue;
+                    android.system.Os.symlink(binary.toString(), commands.resolve(name).toString());
+                }
+            }
+            env.put("PATH", commands.toString());
             env.put("HOME", home.toString());
             env.put("TMPDIR", prefix + "/tmp");
             env.put("PREFIX", prefix);

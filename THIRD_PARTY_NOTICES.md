@@ -1,6 +1,6 @@
 # Third-party notices
 
-Forge IDE uses the following unmodified libraries. Their licenses and copyright notices remain applicable; this document does not choose or change a license for the repository's original application code.
+Forge IDE uses the following libraries (the terminal session adapter is explicitly modified). Their licenses and copyright notices remain applicable; this document does not choose or change a license for the repository's original application code.
 
 | Component | Pinned version / coordinates | License and corresponding source |
 | --- | --- | --- |
@@ -18,6 +18,40 @@ Forge IDE uses the following unmodified libraries. Their licenses and copyright 
 Full license files in `licenses/` are packaged as Android assets and can be read through **Third-party notices** in the command palette. Upstream copyright headers/notices are not removed from source or substituted with a proprietary notice.
 
 Sora is consumed unmodified as a library. The Gradle project and exact dependency coordinates allow rebuilding the app with a modified/replacement Sora library for debugging those modifications; release minification is disabled. Before redistributing binaries, satisfy all LGPL/MPL/source/relinking obligations and include required upstream/transitive notices. Repository links alone are not a substitute for any additional legal obligations that apply to a distributor's particular binary release.
+
+## Optional native companion and terminal renderer
+
+The offline companion embeds pinned Termux Android/bionic packages, not a blanket
+Forge-licensed toolchain. The exact 69-package version/hash lock is
+`tools/native/runtime-lock.json`; the per-package license/source-recipe inventory
+and pinned copyleft source inputs are in `tools/native/sources-lock.json`.
+Original license/copyright files under the payload's `usr/share/doc/` are retained.
+Native ELF/text prefixes are relocated by the checked-in `native-bundle.py`; package
+maintainer scripts are not run. No upstream signature or endorsement is implied.
+
+CI supplies **forge-native-corresponding-sources** alongside the offline APK
+bundle: verified GNU/other copyleft source archives and incremental patches, the
+complete exact Termux build recipe/patch tree, the integration source at that
+commit, checksums and a package license inventory. Non-copyleft source URLs are
+also retained in the full recipes. This supports source distribution obligations;
+it is not a certification of all production linking/relinking/store obligations.
+Keep source availability paired with any binaries you redistribute.
+
+Major native licenses include Clang/LLVM's Apache-2.0-with-exceptions/NCSA,
+CPython's PSF terms, Node's MIT and bundled third-party notices, npm's Artistic-2.0
+and bundled dependency notices, Bash/GNU tools' GPL-3.0/GPL-2.0, and dependencies
+under LGPL/MPL/BSD/MIT/OpenSSL/other licenses recorded in the inventory. Review
+all of them before production redistribution; the IDE's JVM libraries are separate.
+
+`terminal-ui` vendors the terminal-emulator/terminal-view rendering code/resources
+from [termux-app v0.118.3](https://github.com/termux/termux-app/tree/v0.118.3).
+[Upstream's license statement](tools/terminal/upstream/LICENSE.md) identifies these
+libraries as Apache-2.0 exceptions to the surrounding app's GPL license. The
+[Apache text](licenses/AndroidX-Apache-2.0.txt) applies, and original copyright
+headers remain. Forge replaces TerminalSession with a remote-only adapter,
+disables output-triggered clipboard access, and reformats Java; no Termux app
+service/JNI/process launcher is linked into the IDE. See
+[provenance and changes](tools/terminal/README.md).
 
 ## Development-only tools
 

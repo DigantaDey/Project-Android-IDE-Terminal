@@ -117,4 +117,14 @@ public class NativeToolsTest {
             } catch (IllegalArgumentException expected) {}
         }
     }
+
+    @Test
+    public void shellCommandDiscoveryFollowsToolFamilies() {
+        assertEquals("python", NativeTools.commandTool("python3.14"));
+        assertEquals("npm", NativeTools.commandTool("npx"));
+        assertEquals("clang", NativeTools.commandTool("clang++"));
+        assertEquals("clang", NativeTools.commandTool("cc"));
+        assertEquals("node", NativeTools.commandTool("node"));
+        assertEquals("", NativeTools.commandTool("ls"));
+    }
 }

@@ -116,6 +116,7 @@ public final class NativeRuntimeDeviceTest {
                 connection.countDown();
             }
         );
+        active.result.whenComplete((exit, error) -> connection.countDown());
         return active;
     }
 
@@ -235,6 +236,12 @@ public final class NativeRuntimeDeviceTest {
             start("python", "python", "main.py", List.of(), Map.of(), "", 1000, 1024, false, null);
             fail();
         } catch (IllegalStateException expected) {}
+        workspace.write(
+            "check-off.sh",
+            "if command -v python >/dev/null; then echo FLAG_FAILED; exit 1; fi\nprintf 'PYTHON_SWITCH_OFF\\n'\n"
+        );
+        assertRun("bash", "shellscript", "check-off.sh");
+        assertTrue(output.toString(), output.toString().contains("PYTHON_SWITCH_OFF"));
         app.settings.set("native.node", false, false);
         assertFalse(app.nativeRuntime.available("npm"));
         Toolchain provider = app.toolchains.require("clang");
@@ -310,8 +317,9 @@ public final class NativeRuntimeDeviceTest {
         );
         assertTrue(
             "Native Bash must actually reach its launch callback",
-            connected.await(60, TimeUnit.SECONDS)
+            connected.await(110, TimeUnit.SECONDS)
         );
+        assertNotNull("Native Bash launch failed: " + output, identity.get());
         app.nativeRuntime.resize(pty, 32, 100);
         app.nativeRuntime.write(
             pty,

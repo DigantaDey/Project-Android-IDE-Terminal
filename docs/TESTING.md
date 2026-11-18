@@ -2,15 +2,17 @@
 
 ## Standard build
 
-Use JDK 17, an Android SDK with Platform 35, and Gradle's checked-in wrapper (8.10.2). The first build resolves AGP 8.7.3, AndroidX, Sora, Rhino, JGit, and test dependencies from their declared repositories.
+Use JDK 17, an Android SDK with Platform 35, and Gradle's checked-in wrapper (8.10.2). Also install NDK 27.2.12479018, Python 3 and dpkg-deb for native bundle generation. The first build resolves AGP 8.7.3, AndroidX, Sora, Rhino, JGit, and test dependencies from their declared repositories.
 
 ```bash
-./gradlew test :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug
+python3 scripts/native-bundle.py build
+./gradlew test :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :native-runtime:assembleDebug :native-runtime:lintDebug :terminal-ui:lintDebug
 ```
 
 Build outputs:
 
 - `app/build/outputs/apk/debug/app-debug.apk`
+- `native-runtime/build/outputs/apk/debug/native-runtime-debug.apk` (optional companion)
 - `core/*/build/reports/tests/test/index.html`
 - `app/build/reports/lint-results-debug.html`
 
@@ -23,6 +25,7 @@ Use a **disposable emulator/test installation without real projects or credentia
 Start a hardware-accelerated emulator (CI uses API 26/29 x86_64 phones and an API 35 x86_64 tablet), or connect an Android 8.0+ device with debugging enabled:
 
 ```bash
+adb install -r native-runtime/build/outputs/apk/debug/native-runtime-debug.apk
 ./gradlew :app:connectedDebugAndroidTest
 # Or assemble, install and run the same AndroidJUnitRunner directly, with logcat/screenshots:
 bash scripts/device-tests.sh
@@ -36,6 +39,8 @@ Instrumentation exercises:
 - Real static HTML rendering with scripts disabled and confined resource/URL handling when an Android WebView provider exists. The API 26 AOSP image without a provider instead verifies the native unavailable state; the editor and runtimes must remain usable.
 - A screenshot of the actual native workspace, written to the test app's external files directory, with a test-only automation capture in `/data/local/tmp` so runner uninstall cannot remove the CI copy. It is not a design mock; the production app exposes no shell automation API.
 
+Native companion tests additionally compile and execute C and C++, use actual CPython with Unicode argv/stdin and private-file/socket denials, call Node CommonJS/filesystem APIs, install an offline local npm dependency without lifecycle scripts, check native launch switches, native deadlines/cancel/rerun and late-cancel ownership, and exercise actual PTY input/resize/Ctrl-C plus terminal Activity recreation. The companion is required; missing APKs are failures, not skips.
+
 No real GitHub token or external network dependency is used by device tests. Network authentication/remote server compatibility must be tested separately with a dedicated least-privilege test account; do not put credentials in CI logs or this repository.
 
 ## Core regressions
@@ -46,14 +51,16 @@ An optional offline ECJ/JUnit harness exists at `scripts/test-local.sh` for rest
 
 ## CI
 
-`.github/workflows/ci.yml` runs two required verification stages:
+`.github/workflows/ci.yml` runs the following verification stages:
 
 1. Core Gradle tests, CI-helper Python regressions, Android app + test APK compilation, and Android lint.
 2. Hardware-accelerated emulator instrumentation after a successful build: API 26 phone, API 29 phone, and API 35 tablet. Matrix failures do not cancel the other device cases.
 
-The build job uploads both app and test APKs. Every device matrix entry downloads and installs those exact same artifacts; it does not rebuild or resolve Maven dependencies independently. This avoids dependency rate limits and tests a single binary across the matrix. The direct AndroidJUnitRunner status protocol is converted into JUnit XML by a tested, fail-closed parser: missing cases, duplicate/unknown statuses, process death, an abnormal runner exit, or a partial run fail the job. ADB returning zero is not treated as proof of passing tests. The device stage also requires nonempty instrumentation XML and publishes the passed/failed/skipped count. A newer push cancels an older in-progress run. A cancelled emulator is not a passed emulator. Check the exact HEAD commit's run, not an older green build.
+3. A parallel corresponding-source job verifies/publishes the pinned copyleft source archives, GNU incremental patches, complete Termux recipe/patch tree, license inventory and this integration's exact source commit.
 
-Artifacts: **forge-ide-debug-apk**, **forge-ide-instrumentation-apk**, **test-and-lint-reports**, and **device-test-reports-api-…**. Failure diagnostics are also emitted as GitHub check annotations, including instrumentation XML failures, so assertion messages remain visible if artifact download is unavailable.
+The build job generates/caches pinned offline payloads, builds/lints the IDE and companion, and uploads the offline two-APK bundle plus app/test APKs. Every device matrix entry downloads and installs those exact same three APK artifacts; it does not rebuild or resolve Maven dependencies independently. This avoids dependency rate limits and tests a single binary across the matrix. The direct AndroidJUnitRunner status protocol is converted into JUnit XML by a tested, fail-closed parser: missing cases, duplicate/unknown statuses, process death, an abnormal runner exit, or a partial run fail the job. ADB returning zero is not treated as proof of passing tests. The device stage also requires nonempty instrumentation XML and publishes the passed/failed/skipped count. A newer push cancels an older in-progress run. A cancelled emulator is not a passed emulator. Check the exact HEAD commit's run, not an older green build.
+
+Artifacts: **forge-ide-offline-bundle**, **forge-native-corresponding-sources**, **forge-ide-debug-apk**, **forge-ide-instrumentation-apk**, **test-and-lint-reports**, and **device-test-reports-api-…**. Failure diagnostics are also emitted as GitHub check annotations, including instrumentation XML failures, so assertion messages remain visible if artifact download is unavailable.
 
 ## Manual release matrix
 
@@ -70,7 +77,7 @@ Do not describe this manual matrix as passed unless it was actually run and reco
 
 ## Source formatting
 
-Node.js is development tooling only, not a requirement to build or run the Android app with Gradle.
+Host Node.js is only source-formatting/CI tooling, not required to compile with Gradle. The separately bundled optional on-device Node runtime is an unrelated Android/bionic binary.
 
 ```bash
 npm ci --prefix tools/format --ignore-scripts
@@ -79,6 +86,6 @@ npm --prefix tools/format run check
 npm --prefix tools/format run format
 ```
 
-The lockfile pins Prettier and its Java plugin. No package-manager functionality is implied inside the Android app.
+The lockfile pins Prettier and its Java plugin. The formatting toolchain does not install anything into the Android runtime; native npm is bundled and consented separately.
 
 For a restricted QA environment that cannot follow GitHub's artifact-storage redirects, a manual workflow dispatch can enable `visual_report=true`, or a deliberate `[visual-qa]` commit-message marker can opt in on a branch that has not yet added its workflow to the default branch. It emits only the small fixture-workspace JPEG as machine-readable check notices. A test-only instrumentation flag records bounded thumbnail chunks under a dedicated log tag if runner uninstall prevents direct retrieval; the reporter rejects missing/incomplete data and publishes a byte-count/chunk-count/SHA-256 manifest. Thumbnails adapt to a 24,000-byte budget, and one manifest plus at most nine chunks fits GitHub’s ten-notice per-step ceiling. Notice chunks stay below the checks API’s 4 KiB message truncation limit; verify that manifest when reconstructing a thumbnail. Normal push CI only uploads the PNG artifact and does not log thumbnail bytes. Never enable screenshot transport for a run using private user projects or credentials.

@@ -24,8 +24,10 @@ or broad storage permission is used.
    input are forwarded to the companion PTY, not to an IDE-owned process.
 
 Turning a switch off stops the native session and blocks future Forge launches.
-It does **not** shrink an installed APK or make other interpreters impossible to
-implement inside an enabled shell. These are user-consent/launch controls, not DRM
+It removes that tool family from normal PTY command discovery and blocks Forge's
+entry point. It does **not** shrink an installed APK, revoke absolute-path access
+to companion-owned files, or make other interpreters impossible to implement
+inside an enabled shell. These are user-consent/launch controls, not DRM
 or separate security sandboxes for each language.
 
 ## Offline contents
@@ -118,5 +120,8 @@ before the atomic install. Do not put binary payloads into Git.
 The package recipes/patches originate from `termux/termux-packages`; inputs retain
 their respective upstream licenses, not a blanket Forge license. The native APK
 and compiled code have substantial transitive licensing/distribution obligations;
-see `THIRD_PARTY_NOTICES.md`. This development build is not a certification of a
-production app-store distribution or full source/relinking compliance.
+see `THIRD_PARTY_NOTICES.md`. Download **forge-native-corresponding-sources** from
+the same CI run for the verified copyleft source inputs, GNU patches, complete
+recipe tree, license inventory and this integration's source. This development
+build is not a certification of production store policies or every distribution/
+relinking obligation.
