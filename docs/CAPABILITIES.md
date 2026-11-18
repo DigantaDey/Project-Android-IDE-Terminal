@@ -13,7 +13,7 @@ All languages below have offline tokenization/syntax colors, word/keyword comple
 | JavaScript | Brace indentation/pairs, parser diagnostics/syntax check, heuristic symbols | Interpreted Rhino ES6 in an isolated service; real stepping, conditions, stack/variables, watches |
 | TypeScript | JS-family tokenization and TS keywords, lexical declarations | No TS compiler, Node.js, module resolver, or TS language server installed |
 | Python | Python tokenization, colon indentation, comments, heuristic declarations/folds | No Python interpreter, pip, debugpy, or semantic provider installed |
-| HTML | Markup and embedded CSS/JS colors | Static offline preview; scripts disabled |
+| HTML | Markup and embedded CSS/JS colors | Static offline preview when Android WebView is available; otherwise an explicit native unavailable state; scripts stay disabled |
 | CSS | CSS tokens, brace indentation | Rendered by the static HTML preview; no Sass/PostCSS toolchain |
 | JSON | Bounded validation and layout formatting that preserves string/number lexemes | Data only; duplicate keys, excessive nesting, and non-finite parsed numbers rejected |
 | XML | Markup tokens | No schema validator, transformer, or external entity resolution |

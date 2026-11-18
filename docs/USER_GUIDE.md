@@ -102,6 +102,10 @@ Do not put credentials in source, environment, or launch JSON. Run data is inten
 
 Execution defaults to 10 seconds and 256 KiB of output, configurable within safe ranges. Debugging obeys the same effective global/project time and output ceilings, **including pauses**. Increase the global execution timeout (up to 60 seconds) explicitly when you need longer debug sessions; debugging cannot bypass a stricter project/global policy. The service watchdog also stops work outside interpreter checks. Exit codes include 0 (success), 1 (program/runtime error), 124 (deadline/output limit), 130 (user cancellation), and 137 (service/Android termination). Read the accompanying message; Android may terminate an isolated process under resource pressure.
 
+## Static HTML/CSS preview
+
+Run an HTML file to view its local, offline static preview. Scripts, external requests, file/content URLs, forms and native bridges stay disabled. This uses Android’s system WebView, not a bundled browser. If the device has no enabled/usable WebView provider, a native error screen explains how to enable or update Android System WebView and return to the editor; Forge never silently enables downloads or opens a less-confined external browser. A renderer failure is also recoverable without closing your project.
+
 ## Running SQL
 
 Create/open a `.sql` file and choose Run. Each run creates a **new in-memory SQLite database**:

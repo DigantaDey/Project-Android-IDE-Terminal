@@ -18,7 +18,7 @@ import org.junit.runner.RunWith;
 public final class PreviewDeviceTest {
 
     @Test
-    public void staticPreviewRendersConfinedHtmlWithoutActiveCapabilities() throws Exception {
+    public void staticPreviewIsConfinedOrExplainsMissingSystemProvider() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         ForgeApplication app = (ForgeApplication) context.getApplicationContext();
         String file = ".forge-preview-device.html";
@@ -27,6 +27,8 @@ public final class PreviewDeviceTest {
             "<!doctype html><title>Confined preview fixture</title><h1>Offline</h1><script>document.title='unsafe'</script>"
         );
         CountDownLatch loaded = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean unavailable =
+            new java.util.concurrent.atomic.AtomicBoolean();
         try (
             ActivityScenario<PreviewActivity> scenario = ActivityScenario.launch(
                 new Intent(context, PreviewActivity.class).putExtra("file", file)
@@ -34,11 +36,25 @@ public final class PreviewDeviceTest {
         ) {
             scenario.onActivity(activity -> {
                 WebView web = activity.findViewById(PreviewActivity.PREVIEW_ID);
+                if (web == null) {
+                    assertNull(
+                        "Only devices without a system renderer should take the missing-provider path",
+                        WebView.getCurrentWebViewPackage()
+                    );
+                    assertUnavailable(activity);
+                    unavailable.set(true);
+                    loaded.countDown();
+                    return;
+                }
                 assertFalse(web.getSettings().getJavaScriptEnabled());
                 assertFalse(web.getSettings().getAllowFileAccess());
                 assertFalse(web.getSettings().getAllowContentAccess());
                 assertTrue(web.getSettings().getBlockNetworkLoads());
                 WebViewClient confined = web.getWebViewClient();
+                assertTrue(confined.shouldOverrideUrlLoading(web, request("http://forge.invalid/main.html")));
+                assertTrue(
+                    confined.shouldOverrideUrlLoading(web, request("content://forge.invalid/main.html"))
+                );
                 assertEquals(
                     403,
                     confined
@@ -76,18 +92,41 @@ public final class PreviewDeviceTest {
                         public void onPageFinished(WebView view, String url) {
                             loaded.countDown();
                         }
+
+                        @Override
+                        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                            return confined.onRenderProcessGone(view, detail);
+                        }
                     }
                 );
                 web.reload();
             });
             assertTrue("Local HTML must actually load", loaded.await(15, TimeUnit.SECONDS));
             scenario.onActivity(activity -> {
+                if (unavailable.get()) {
+                    assertUnavailable(activity);
+                    return;
+                }
                 WebView web = activity.findViewById(PreviewActivity.PREVIEW_ID);
                 assertEquals("Confined preview fixture", web.getTitle());
+                // Simulate the Android callback; the real HTML must have rendered before recovery.
+                assertTrue(web.getWebViewClient().onRenderProcessGone(web, null));
+                assertUnavailable(activity);
             });
         } finally {
             app.workspace.delete(file);
         }
+    }
+
+    private static void assertUnavailable(PreviewActivity activity) {
+        android.widget.TextView message = activity.findViewById(PreviewActivity.PREVIEW_UNAVAILABLE_ID);
+        assertNotNull("Missing WebView must display a native capability error instead of crashing", message);
+        assertTrue(message.isShown());
+        assertTrue(message.getText().toString().contains("Static preview unavailable"));
+        assertTrue(
+            message.getText().toString().contains("source files, editor and isolated runtimes are unaffected")
+        );
+        assertNull(activity.findViewById(PreviewActivity.PREVIEW_ID));
     }
 
     private static WebResourceRequest request(String value) {

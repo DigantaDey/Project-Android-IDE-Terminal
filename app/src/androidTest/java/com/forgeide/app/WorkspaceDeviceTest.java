@@ -322,15 +322,37 @@ public final class WorkspaceDeviceTest {
         try (OutputStream out = new FileOutputStream(new File(dir, "workspace.png"))) {
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out));
         }
-        Bitmap thumbnail = Bitmap.createScaledBitmap(
-            bitmap,
-            360,
-            Math.max(1, (bitmap.getHeight() * 360) / bitmap.getWidth()),
-            true
+        // One manifest plus at most nine notices fits GitHub's ten-notice per-step limit.
+        // A wider tablet thumbnail remains legible; original PNGs stay in the normal artifacts.
+        ByteArrayOutputStream preview = new ByteArrayOutputStream();
+        int width = Math.min(
+            bitmap.getWidth(),
+            InstrumentationRegistry.getInstrumentation()
+                        .getTargetContext()
+                        .getResources()
+                        .getConfiguration()
+                        .screenWidthDp >=
+                    840
+                ? 720
+                : 360
         );
-        try (OutputStream output = new FileOutputStream(new File(dir, "workspace-preview.jpg"))) {
-            assertTrue(thumbnail.compress(Bitmap.CompressFormat.JPEG, 72, output));
+        int quality = 72;
+        for (int attempt = 0; ; attempt++) {
+            Bitmap thumbnail = Bitmap.createScaledBitmap(
+                bitmap,
+                width,
+                Math.max(1, (bitmap.getHeight() * width) / bitmap.getWidth()),
+                true
+            );
+            preview.reset();
+            assertTrue(thumbnail.compress(Bitmap.CompressFormat.JPEG, quality, preview));
+            if (thumbnail != bitmap) thumbnail.recycle();
+            if (preview.size() <= 24000) break;
+            assertTrue("Native QA thumbnail must fit the bounded annotation transport", attempt < 10);
+            if (quality > 42) quality -= 10;
+            else width = Math.max(120, (width * 4) / 5);
         }
+        Files.write(new File(dir, "workspace-preview.jpg").toPath(), preview.toByteArray());
         // Only opt in on disposable fixture installations. The app itself never logs screenshots.
         if ("true".equals(InstrumentationRegistry.getArguments().getString("visualReport"))) {
             String encoded = android.util.Base64.encodeToString(
@@ -349,7 +371,6 @@ public final class WorkspaceDeviceTest {
                     encoded.substring(i * chunk, Math.min(encoded.length(), (i + 1) * chunk))
             );
         }
-        thumbnail.recycle();
         bitmap.recycle();
     }
 }
