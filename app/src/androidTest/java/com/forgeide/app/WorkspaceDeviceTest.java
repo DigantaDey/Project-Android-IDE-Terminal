@@ -134,15 +134,32 @@ public final class WorkspaceDeviceTest {
                         a.getWindow(),
                         a.getWindow().getDecorView()
                     );
+                boolean modern = android.os.Build.VERSION.SDK_INT >= 30;
+                boolean darkIcons = modern && android.graphics.Color.luminance(background) > 0.4;
                 assertEquals(
-                    "Status icons must contrast with the native theme",
-                    android.graphics.Color.luminance(background) > 0.4,
+                    "Status icons must contrast with the actual system frame",
+                    darkIcons,
                     bars.isAppearanceLightStatusBars()
                 );
-                if (android.os.Build.VERSION.SDK_INT >= 27) assertEquals(
-                    android.graphics.Color.luminance(background) > 0.4,
+                assertEquals(
+                    "Navigation icons must contrast even on API 26",
+                    darkIcons,
                     bars.isAppearanceLightNavigationBars()
                 );
+                if (!modern) {
+                    assertTrue(android.graphics.Color.luminance(a.getWindow().getStatusBarColor()) < 0.1);
+                    assertTrue(android.graphics.Color.luminance(a.getWindow().getNavigationBarColor()) < 0.1);
+                }
+                ForgeApplication app = (ForgeApplication) a.getApplication();
+                if (app.terminalSessions.get(app.project).get(0).output().isEmpty()) {
+                    android.widget.TextView terminal = a.findViewById(MainActivity.TERMINAL_TEXT_ID);
+                    assertNotNull(terminal);
+                    assertTrue(
+                        "An empty transcript still needs its honest native help state after refresh",
+                        terminal.getText().toString().contains("Type help")
+                    );
+                    assertTrue(terminal.getText().toString().contains("not Bash or a native PTY"));
+                }
                 assertEquals("Command palette", palette.getContentDescription());
                 assertTrue(palette.performClick());
             });

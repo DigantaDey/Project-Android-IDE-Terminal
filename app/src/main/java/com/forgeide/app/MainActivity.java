@@ -43,7 +43,8 @@ public final class MainActivity extends Activity {
         RUN_ID = 1002,
         SAVE_ID = 1003,
         PALETTE_ID = 1004,
-        SECONDARY_EDITOR_ID = 1005;
+        SECONDARY_EDITOR_ID = 1005,
+        TERMINAL_TEXT_ID = 1006;
     private static final int IMPORT_TREE = 31,
         IMPORT_ZIP = 32,
         EXPORT_ZIP = 33,
@@ -218,15 +219,17 @@ public final class MainActivity extends Activity {
     }
 
     private void applySystemBarAppearance() {
-        getWindow().setStatusBarColor(surface);
-        // API 26 cannot draw dark navigation icons; keep its light-theme bar dark for contrast.
-        getWindow().setNavigationBarColor(
-            Build.VERSION.SDK_INT < 27 && Color.luminance(bg) > 0.4 ? Color.rgb(17, 19, 24) : surface
-        );
+        // Use a stable dark system frame on legacy SystemUI; modern inset controllers follow
+        // the editor palette. Icon appearance must match the *bar*, not just the document theme.
+        boolean modern = Build.VERSION.SDK_INT >= 30;
+        int barColor = modern ? surface : Color.rgb(17, 19, 24);
+        getWindow().setStatusBarColor(barColor);
+        getWindow().setNavigationBarColor(barColor);
+        boolean darkIcons = modern && Color.luminance(bg) > 0.4;
         androidx.core.view.WindowInsetsControllerCompat bars =
             new androidx.core.view.WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
-        bars.setAppearanceLightStatusBars(Color.luminance(bg) > 0.4);
-        bars.setAppearanceLightNavigationBars(Color.luminance(bg) > 0.4);
+        bars.setAppearanceLightStatusBars(darkIcons);
+        bars.setAppearanceLightNavigationBars(darkIcons);
     }
 
     @Override
@@ -650,7 +653,7 @@ public final class MainActivity extends Activity {
         if (outputText != null && panelName.equals("Output")) outputText.setText(app.output.toString());
         if (
             terminalText != null && visibleTerminal != null && panelName.equals("Terminal")
-        ) terminalText.setText(visibleTerminal.output());
+        ) terminalText.setText(terminalDisplay(visibleTerminal));
         if (debugText != null && panelName.equals("Debugger")) debugText.setText(debugDescription());
     }
 
@@ -1668,6 +1671,13 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private String terminalDisplay(TerminalSession terminal) {
+        String output = terminal.output();
+        return output.isEmpty()
+            ? "Forge project shell · scoped file commands\nType help to see available commands.\nThis is not Bash or a native PTY.\n"
+            : output;
+    }
+
     private void terminalPanel() {
         restoreTerminals();
         LinearLayout tools = row();
@@ -1714,11 +1724,8 @@ public final class MainActivity extends Activity {
         );
         tools.addView(action("■", "Stop execution", this::stop));
         panelBody.addView(tools);
-        terminalText = scrollText(
-            terminal.output().isEmpty()
-                ? "Forge project shell · isolated file authority\nType help for available commands. This is not a native PTY.\n"
-                : terminal.output()
-        );
+        terminalText = scrollText(terminalDisplay(terminal));
+        terminalText.setId(TERMINAL_TEXT_ID);
         LinearLayout prompt = row();
         TextView dollar = label("$", 14, accent);
         prompt.addView(dollar);
@@ -3667,6 +3674,7 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (app != null && app.initialized) {
+            if (root != null) applySystemBarAppearance();
             app.main.removeCallbacks(autosave);
             app.main.postDelayed(autosave, app.settings.integer("autosaveSeconds") * 1000L);
             Path file = app.stateDir.resolve("shortcuts.json");

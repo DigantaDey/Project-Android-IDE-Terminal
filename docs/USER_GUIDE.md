@@ -12,7 +12,7 @@ The **Welcome** project opens a real JavaScript file, not a static demo screen. 
 - Explorer folders: tap to expand; long-press for folder operations. Long-press a file for rename/move, duplicate, trash, share, export, and history actions. Explorer renames preserve open buffers, recovery paths, the active tab, and breakpoint conditions; duplication keeps the original intact.
 - **Split / unsplit editor** shares the actual document/undo history. Tap a pane to focus it. Split panes do not create independent copies of the file. Delayed formatting/search/replacement results are checked against both document revision and the editor’s bound document; switching or closing a tab cannot redirect an old result into a new buffer.
 
-Narrow windows start with the explorer hidden. Wider windows show it alongside the editor. Orientation and window-size changes recreate the native layout while preserving process-lifetime documents and undo history.
+On Android 8–10, the system status/navigation frame stays dark with light icons for consistent contrast; newer inset controllers follow the editor palette. Narrow windows start with the explorer hidden. Wider windows show it alongside the editor. Orientation and window-size changes recreate the native layout while preserving process-lifetime documents and undo history.
 
 ## Editing
 
