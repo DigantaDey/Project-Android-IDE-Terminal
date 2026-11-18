@@ -17,9 +17,9 @@ class CiToolsTest(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.folder = Path(self.temporary.name)
 
-    def run_tool(self, name, path):
+    def run_tool(self, name, *paths):
         return subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / name), str(path)],
+            [sys.executable, str(ROOT / "scripts" / name), *(str(path) for path in paths)],
             text=True, capture_output=True, check=False,
         )
 
@@ -97,6 +97,67 @@ class CiToolsTest(unittest.TestCase):
         (self.folder / "TEST-broken.xml").write_text("<testsuite>")
         report = self.run_tool("device-test-summary.py", self.folder)
         self.assertNotEqual(0, report.returncode)
+
+
+class InstrumentationProtocolTest(unittest.TestCase):
+    setUp = CiToolsTest.setUp
+    run_tool = CiToolsTest.run_tool
+    # Real AndroidJUnitRunner wire-format fixtures, not fabricated evidence for an emulator run.
+    def status(self, name="one", code=0, total=1, stack=""):
+        common = (f"INSTRUMENTATION_STATUS: class=fixture.Case\n"
+                  f"INSTRUMENTATION_STATUS: test={name}\n"
+                  f"INSTRUMENTATION_STATUS: numtests={total}\n")
+        return (common + "INSTRUMENTATION_STATUS_CODE: 1\n" + common +
+                (f"INSTRUMENTATION_STATUS: stack={stack}\n" if stack else "") +
+                f"INSTRUMENTATION_STATUS_CODE: {code}\n")
+
+    def convert(self, text):
+        source = self.folder / "protocol.log"
+        source.write_text(text)
+        return self.run_tool("instrumentation-report.py", source, self.folder / "TEST-device.xml")
+
+    def test_complete_runner_protocol_is_converted_to_real_case_identities(self):
+        import xml.etree.ElementTree as ET
+        result = self.convert(self.status("one", total=2) + self.status("two", total=2) +
+                              "INSTRUMENTATION_RESULT: stream=OK (2 tests)\nINSTRUMENTATION_CODE: -1\n")
+        self.assertEqual(0, result.returncode, result.stderr)
+        suite = ET.parse(self.folder / "TEST-device.xml").getroot()
+        self.assertEqual("2", suite.get("tests"))
+        self.assertEqual(["one", "two"], [case.get("name") for case in suite.findall("testcase")])
+
+    def test_failed_case_writes_diagnostics_but_never_returns_success(self):
+        import xml.etree.ElementTree as ET
+        stack = "java.lang.AssertionError: value < 42\n  at fixture.Case.one(Case.java:12)"
+        result = self.convert(self.status(code=-2, stack=stack) + "INSTRUMENTATION_CODE: -1\n")
+        self.assertEqual(1, result.returncode)
+        failure = ET.parse(self.folder / "TEST-device.xml").getroot().find("testcase/failure")
+        self.assertEqual(stack, failure.text)
+
+    def test_truncated_runner_output_is_not_accepted_even_with_a_success_exit_marker(self):
+        result = self.convert(self.status(total=2) + "INSTRUMENTATION_CODE: -1\n")
+        self.assertNotEqual(0, result.returncode)
+        self.assertFalse((self.folder / "TEST-device.xml").exists())
+
+    def test_runner_crash_or_adb_exit_is_not_test_success(self):
+        for end in ("", "INSTRUMENTATION_CODE: 0\n", "INSTRUMENTATION_FAILED: process died\nINSTRUMENTATION_CODE: -1\n",
+                    "INSTRUMENTATION_RESULT: shortMsg=Process crashed.\nINSTRUMENTATION_CODE: -1\n"):
+            result = self.convert(self.status() + end)
+            self.assertNotEqual(0, result.returncode)
+
+    def test_duplicate_or_unknown_case_status_fails_closed(self):
+        for text in (self.status() + self.status(), self.status(code=42),
+                     "INSTRUMENTATION_STATUS_CODE: 0\n"):
+            result = self.convert(text + "INSTRUMENTATION_CODE: -1\n")
+            self.assertNotEqual(0, result.returncode)
+
+    def test_ignored_and_assumption_cases_are_explicitly_skipped(self):
+        import xml.etree.ElementTree as ET
+        text = self.status("one", -3, 2) + self.status("two", -4, 2, "assumption failed")
+        result = self.convert(text + "INSTRUMENTATION_CODE: -1\n")
+        self.assertEqual(0, result.returncode, result.stderr)
+        suite = ET.parse(self.folder / "TEST-device.xml").getroot()
+        self.assertEqual("2", suite.get("skipped"))
+        self.assertEqual(2, len(suite.findall("testcase/skipped")))
 
 
 if __name__ == "__main__":

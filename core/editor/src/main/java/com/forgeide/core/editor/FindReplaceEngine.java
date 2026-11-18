@@ -188,6 +188,13 @@ public final class FindReplaceEngine {
         if (value != null) append(result, value, 0, value.length());
     }
 
+    /** Resolve one Java-style template with the same pre-allocation limit used by document replace-all. */
+    public static String replacementValue(Matcher matcher, String replacement, boolean regex) {
+        StringBuilder value = new StringBuilder();
+        expand(value, matcher, replacement, regex);
+        return value.toString();
+    }
+
     /** Java Matcher replacement grammar, appended with pre-allocation growth checks for each capture. */
     private static void expand(StringBuilder result, Matcher matcher, String replacement, boolean regex) {
         if (!regex) {

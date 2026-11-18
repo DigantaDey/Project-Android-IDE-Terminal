@@ -10,7 +10,7 @@ The **Welcome** project opens a real JavaScript file, not a static demo screen. 
 - Tabs: tap to select; long-press for file actions; × closes with a save/discard prompt when needed.
 - Bottom panels: Terminal, Output, Problems, Debugger, Search, Git, Logs. Tap a tab to reopen a hidden panel. Drag the panel divider to resize.
 - Explorer folders: tap to expand; long-press for folder operations. Long-press a file for rename/move, duplicate, trash, share, export, and history actions. Explorer renames preserve open buffers, recovery paths, the active tab, and breakpoint conditions; duplication keeps the original intact.
-- **Split / unsplit editor** shares the actual document/undo history. Tap a pane to focus it. Split panes do not create independent copies of the file.
+- **Split / unsplit editor** shares the actual document/undo history. Tap a pane to focus it. Split panes do not create independent copies of the file. Delayed formatting/search/replacement results are checked against both document revision and the editor’s bound document; switching or closing a tab cannot redirect an old result into a new buffer.
 
 Narrow windows start with the explorer hidden. Wider windows show it alongside the editor. Orientation and window-size changes recreate the native layout while preserving process-lifetime documents and undo history.
 
@@ -56,7 +56,7 @@ Document find supports literal/regex, case sensitivity, whole words, next/previo
 
 Project search is line-scoped and bounded. Results link to source. It skips private tool metadata, Git, trash, dependency/build trees, binary/non-UTF-8 files, and files larger than 2 MiB. The UI shows at most 1,000 matches, so replacement only affects the previewed results.
 
-Project replacement requires confirmation and closed affected tabs. Each file is digest-checked before writing and backed up in `.forge/replace-backups`. Replacement is atomic per file, **not across the whole project**. If cancelled or a later file changes, inspect the error and retained backups before retrying.
+Project replacement requires confirmation and closed affected tabs. Each file’s previewed ranges and replacement templates are revalidated against the original line context, constructed in a bounded forward pass, digest-checked before writing, and backed up in `.forge/replace-backups`. Replacement is atomic per file, **not across the whole project**. If cancelled or a later file changes, inspect the error and retained backups before retrying.
 
 ## Projects, Android storage, and recovery
 

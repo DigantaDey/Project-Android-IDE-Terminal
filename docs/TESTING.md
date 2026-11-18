@@ -18,17 +18,19 @@ Do not commit APKs, Gradle caches, SDKs, downloaded runtimes, credentials, or lo
 
 ## Device integration
 
+Use a **disposable emulator/test installation without real projects or credentials**: instrumentation intentionally exercises fixture files and overwrites/deletes its fake GitHub-vault credential. Do not run it against a personal IDE installation.
+
 Start a hardware-accelerated emulator (CI uses API 26/29 x86_64 phones and an API 35 x86_64 tablet), or connect an Android 8.0+ device with debugging enabled:
 
 ```bash
 ./gradlew :app:connectedDebugAndroidTest
-# Or collect logcat/screenshot reports even on a failure:
+# Or assemble, install and run the same AndroidJUnitRunner directly, with logcat/screenshots:
 bash scripts/device-tests.sh
 ```
 
 Instrumentation exercises:
 
-- Real native editor input, undo/redo, disk save, shared split views and terminal retention across Activity recreation, command controls, out-of-project recovery, dirty folder renames/journal/breakpoint migration, shell protection of open buffers, and effective execution-policy ceilings.
+- Real native editor input, undo/redo, disk save, shared split views and terminal retention across Activity recreation, command controls, out-of-project recovery, dirty folder renames/journal/breakpoint migration, shell protection of open buffers, effective execution-policy ceilings, and a gated native Ctrl+Tab/format race that must not overwrite the newly selected buffer.
 - Runtime identity, real kernel socket denial and private-file probes, real JavaScript/SQLite, interpreter/native-work deadlines, immediate cancel followed by rerun, old-token cancellation ownership, denied SQL attach/extensions, unsupported strict-policy refusal, and real debugger stepping/watch evaluation/resume events through Binder.
 - Real local JGit commits/diffs/history/branches, repository TLS/redirect hardening and forbidden external cookie files, an executable hook witness that must not run, explicit process denial, and encrypted Keystore token round trips/deletion using fake fixture credentials.
 - Real static HTML rendering with scripts disabled and confined resource/URL handling when an Android WebView provider exists. The API 26 AOSP image without a provider instead verifies the native unavailable state; the editor and runtimes must remain usable.
@@ -38,7 +40,7 @@ No real GitHub token or external network dependency is used by device tests. Net
 
 ## Core regressions
 
-The Java library suites cover the edit/undo model and 4,000 randomized edits; malformed-Unicode token tiling; indentation/pairs/folds; bounded catastrophic regex, zero-width/contextual replacements, Java replacement-template compatibility, large single-pass replacement, stale matches and oversized expansions; JSON validity/formatting lexemes; SQL splitting; path/symlink confinement, invalid UTF-8, checked-save conflicts and ZIP traversal/limits; recoverable trash and restore conflicts; project-search snapshots; cancellation races; UTF-8 output limits; recovery checksums, corrupt-entry isolation and bounded project restoration; staged provider imports/failures/conflicts; terminal confinement/history/open-buffer mutation guards; URL/conflict policy; actual JS execution/deadline/cancellation/debug watches; command registry; run configs/provider-language compatibility/build-log parsing; and real in-memory LSP/DAP framing/correlation/disconnect tests.
+The Java library suites cover the edit/undo model and 4,000 randomized edits; malformed-Unicode token tiling; indentation/pairs/folds; bounded catastrophic regex, zero-width/contextual replacements, Java replacement-template compatibility, large single-pass replacement, stale matches and oversized expansions; JSON validity/formatting lexemes; SQL splitting; path/symlink confinement, invalid UTF-8, checked-save conflicts and ZIP traversal/limits; recoverable trash and restore conflicts; project-search snapshots, contextual/named-group preview-only replacements, bounded expansion before backups, and cancellation immediately before publishing; cancellation races; UTF-8 output limits; recovery checksums, corrupt-entry isolation and bounded project restoration; staged provider imports/failures/conflicts; terminal confinement/history/open-buffer mutation guards; URL/conflict policy; actual JS execution/deadline/cancellation/debug watches; command registry; run configs/provider-language compatibility/build-log parsing; and real in-memory LSP/DAP framing/correlation/disconnect tests.
 
 An optional offline ECJ/JUnit harness exists at `scripts/test-local.sh` for restricted environments. It needs ECJ, JUnit, Hamcrest, and Rhino jars in `.local/tools` and a working Java runtime (`JAVA=…`). Those jars are not vendored. The standard reproducible path is Gradle; the optional harness does not compile the Android app or replace Android lint/device tests.
 
@@ -49,9 +51,9 @@ An optional offline ECJ/JUnit harness exists at `scripts/test-local.sh` for rest
 1. Core Gradle tests, CI-helper Python regressions, Android app + test APK compilation, and Android lint.
 2. Hardware-accelerated emulator instrumentation after a successful build: API 26 phone, API 29 phone, and API 35 tablet. Matrix failures do not cancel the other device cases.
 
-The device stage also requires nonempty instrumentation XML and publishes the passed/failed/skipped count. A newer push cancels an older in-progress run. A cancelled emulator is not a passed emulator. Check the exact HEAD commit's run, not an older green build.
+The build job uploads both app and test APKs. Every device matrix entry downloads and installs those exact same artifacts; it does not rebuild or resolve Maven dependencies independently. This avoids dependency rate limits and tests a single binary across the matrix. The direct AndroidJUnitRunner status protocol is converted into JUnit XML by a tested, fail-closed parser: missing cases, duplicate/unknown statuses, process death, an abnormal runner exit, or a partial run fail the job. ADB returning zero is not treated as proof of passing tests. The device stage also requires nonempty instrumentation XML and publishes the passed/failed/skipped count. A newer push cancels an older in-progress run. A cancelled emulator is not a passed emulator. Check the exact HEAD commit's run, not an older green build.
 
-Artifacts: **forge-ide-debug-apk**, **test-and-lint-reports**, and **device-test-reports-api-…**. Failure diagnostics are also emitted as GitHub check annotations, including instrumentation XML failures, so assertion messages remain visible if artifact download is unavailable.
+Artifacts: **forge-ide-debug-apk**, **forge-ide-instrumentation-apk**, **test-and-lint-reports**, and **device-test-reports-api-…**. Failure diagnostics are also emitted as GitHub check annotations, including instrumentation XML failures, so assertion messages remain visible if artifact download is unavailable.
 
 ## Manual release matrix
 

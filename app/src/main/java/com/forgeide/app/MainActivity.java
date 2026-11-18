@@ -217,7 +217,7 @@ public final class MainActivity extends Activity {
         parent.addView(v, new LinearLayout.LayoutParams(-1, dp(1)));
     }
 
-    private void makeLayout() {
+    private void applySystemBarAppearance() {
         getWindow().setStatusBarColor(surface);
         // API 26 cannot draw dark navigation icons; keep its light-theme bar dark for contrast.
         getWindow().setNavigationBarColor(
@@ -227,6 +227,17 @@ public final class MainActivity extends Activity {
             new androidx.core.view.WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView());
         bars.setAppearanceLightStatusBars(Color.luminance(bg) > 0.4);
         bars.setAppearanceLightNavigationBars(Color.luminance(bg) > 0.4);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        // Dialogs/preview providers can change system UI flags while this Activity loses focus.
+        if (hasFocus && root != null) applySystemBarAppearance();
+    }
+
+    private void makeLayout() {
+        applySystemBarAppearance();
         root = column();
         root.setBackgroundColor(bg);
         root.setOnApplyWindowInsetsListener((v, insets) -> {
@@ -507,6 +518,10 @@ public final class MainActivity extends Activity {
     }
 
     private void display(ForgeApplication.OpenDocument doc, boolean right) {
+        if (doc.owner != app.workspace || !app.documents.contains(doc)) {
+            toast("Project or document changed; operation cancelled");
+            return;
+        }
         if (right && secondary == null) {
             secondary = createEditor();
             secondary.setId(SECONDARY_EDITOR_ID);
@@ -2225,10 +2240,18 @@ public final class MainActivity extends Activity {
     }
 
     private void goTo(String file, int line, int column) {
+        Workspace owner = app.workspace;
         background(
             "Navigating…",
-            () -> app.open(file),
+            () -> {
+                if (app.workspace != owner) throw new IOException("Project changed; navigation cancelled");
+                return app.open(file);
+            },
             doc -> {
+                if (app.workspace != owner) {
+                    toast("Project changed; navigation cancelled");
+                    return;
+                }
                 display(doc, false);
                 int l = Math.max(0, Math.min(line, primary.getLineCount() - 1));
                 primary.setSelection(l, Math.max(0, Math.min(column, primary.getText().getColumnCount(l))));
@@ -2314,6 +2337,19 @@ public final class MainActivity extends Activity {
         if (!word.isEmpty()) searchProject(new FindReplaceEngine.Query(word, false, true, true), false, "");
     }
 
+    /** A revision alone cannot prove ownership: the same native editor can now display another tab. */
+    private boolean ownsDocumentResult(CodeEditor editor, ForgeApplication.OpenDocument doc, long revision) {
+        return (
+            !destroyed &&
+            (editor == primary || editor == secondary) &&
+            doc != null &&
+            doc.owner == app.workspace &&
+            app.documents.contains(doc) &&
+            editor.getText() == doc.content &&
+            doc.revision.get() == revision
+        );
+    }
+
     private void format() {
         ForgeApplication.OpenDocument d = current();
         if (d == null) return;
@@ -2328,8 +2364,8 @@ public final class MainActivity extends Activity {
                     app.settings.integer("tabSize")
                 ),
             value -> {
-                if (revision != d.revision.get()) {
-                    toast("Document changed while formatting; no changes applied");
+                if (!ownsDocumentResult(editor, d, revision)) {
+                    toast("Document changed or switched while formatting; no changes applied");
                     return;
                 }
                 editor.getText().replace(0, editor.getText().length(), value);
@@ -2428,7 +2464,9 @@ public final class MainActivity extends Activity {
                 );
                 CodeEditor target = focused;
                 ForgeApplication.OpenDocument doc = current();
-                int from = target.getCursor().getRight();
+                if (doc == null) return;
+                int from = target.getCursor().getRight(),
+                    left = target.getCursor().getLeft();
                 long revision = doc.revision.get();
                 String replace = replacement.getText().toString();
                 background(
@@ -2444,14 +2482,14 @@ public final class MainActivity extends Activity {
                             return new Object[] { snapshot.text(), count };
                         }
                         FindReplaceEngine.Match match = name.equals("Previous")
-                            ? engine.findPrevious(q, target.getCursor().getLeft(), true)
-                            : engine.findNext(q, from, true);
+                            ? engine.findPrevious(q, left, true)
+                            : engine.findNext(q, name.equals("Replace") ? left : from, true);
                         if (match != null && name.equals("Replace")) engine.replace(q, match, replace);
                         return new Object[] { name.equals("Replace") ? snapshot.text() : null, match };
                     },
                     result -> {
-                        if (doc.revision.get() != revision) {
-                            toast("Document changed; search again");
+                        if (!ownsDocumentResult(target, doc, revision)) {
+                            toast("Document changed or switched; search again");
                             return;
                         }
                         if (name.equals("All")) {
@@ -2460,8 +2498,8 @@ public final class MainActivity extends Activity {
                                 .setMessage("This is one undo step.")
                                 .setNegativeButton("Cancel", null)
                                 .setPositiveButton("Replace", (x, w) -> {
-                                    if (doc.revision.get() != revision) {
-                                        toast("Document changed; no replacement applied");
+                                    if (!ownsDocumentResult(target, doc, revision)) {
+                                        toast("Document changed or switched; no replacement applied");
                                         return;
                                     }
                                     target
@@ -2476,18 +2514,20 @@ public final class MainActivity extends Activity {
                                 toast("No matches");
                                 return;
                             }
-                            if (result[0] != null) target
-                                .getText()
-                                .replace(0, target.getText().length(), (String) result[0]);
+                            int selectionEnd = match.range.end;
+                            if (result[0] != null) {
+                                String next = (String) result[0];
+                                selectionEnd =
+                                    match.range.start +
+                                    next.length() -
+                                    doc.content.length() +
+                                    match.range.length();
+                                doc.content.replace(0, doc.content.length(), next);
+                            }
                             focused = target;
                             selectOffset(
                                 match.range.start,
-                                Math.min(
-                                    target.getText().length(),
-                                    name.equals("Replace")
-                                        ? match.range.start + replace.length()
-                                        : match.range.end
-                                )
+                                Math.min(target.getText().length(), selectionEnd)
                             );
                         }
                     }
@@ -2552,6 +2592,10 @@ public final class MainActivity extends Activity {
             "Searching project…",
             () -> new ProjectSearch().search(workspace, query, 1000, cancel),
             hits -> {
+                if (app.workspace != workspace) {
+                    toast("Project changed; search cancelled");
+                    return;
+                }
                 showPanel("Search");
                 panelBody.removeAllViews();
                 if (hits.isEmpty()) {
@@ -2569,6 +2613,10 @@ public final class MainActivity extends Activity {
                             )
                             .setNegativeButton("Cancel", null)
                             .setPositiveButton("Replace", (d, w) -> {
+                                if (app.workspace != workspace) {
+                                    toast("Project changed; no replacement applied");
+                                    return;
+                                }
                                 for (ForgeApplication.OpenDocument doc : app.documents)
                                     for (ProjectSearch.Hit h : hits)
                                         if (doc.path.equals(h.file)) {
@@ -2577,8 +2625,18 @@ public final class MainActivity extends Activity {
                                         }
                                 background(
                                     "Replacing…",
-                                    () ->
-                                        new ProjectSearch().replace(
+                                    () -> {
+                                        if (app.workspace != workspace) throw new IOException(
+                                            "Project changed; no replacement applied"
+                                        );
+                                        for (ForgeApplication.OpenDocument doc : app.documents)
+                                            for (ProjectSearch.Hit hit : hits)
+                                                if (
+                                                    doc.owner == workspace && doc.path.equals(hit.file)
+                                                ) throw new IOException(
+                                                    "Close affected editor tabs before replacing across files"
+                                                );
+                                        return new ProjectSearch().replace(
                                             workspace,
                                             query,
                                             replacement,
@@ -2596,7 +2654,8 @@ public final class MainActivity extends Activity {
                                                     throw new CompletionException(e);
                                                 }
                                             }
-                                        ),
+                                        );
+                                    },
                                     count -> {
                                         toast("Replaced " + count + " matches");
                                         refreshTree();
@@ -2610,6 +2669,10 @@ public final class MainActivity extends Activity {
                 listPanel(
                     hits.stream().map(Object::toString).collect(java.util.stream.Collectors.toList()),
                     i -> {
+                        if (app.workspace != workspace) {
+                            toast("Project changed; search again");
+                            return;
+                        }
                         ProjectSearch.Hit h = hits.get(i);
                         goTo(h.file, h.line, h.column);
                     }
