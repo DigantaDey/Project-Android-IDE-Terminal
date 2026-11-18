@@ -28,6 +28,7 @@ public final class ExecutionService extends Service {
                 try(ParcelFileDescriptor.AutoCloseInputStream stream=new ParcelFileDescriptor.AutoCloseInputStream(source)){
                     ByteArrayOutputStream bytes=new ByteArrayOutputStream();byte[] buf=new byte[8192];int n;
                     while((n=stream.read(buf))!=-1){if(bytes.size()+n>512*1024)throw new IOException("Source exceeds 512 KiB");bytes.write(buf,0,n);}
+                    callback.onEvent(Json.write(Map.of("event","sandboxReady","uid",android.os.Process.myUid(),"isolated",android.os.Process.myUid()!=getApplicationInfo().uid,"hostFilesReadable",getFilesDir().canRead(),"networkPermission",checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED)));
                     String code=bytes.toString(StandardCharsets.UTF_8.name());
                     Map<String,String> env=new LinkedHashMap<>();Bundle values=config.getBundle("environment");if(values!=null)for(String key:values.keySet()){if(env.size()>=100)break;env.put(key,values.getString(key,""));}
                     if(config.getBoolean("debug")){
@@ -43,10 +44,10 @@ public final class ExecutionService extends Service {
                 finally{running=false;watchdog.removeCallbacksAndMessages(null);debugger=null;}
             });
         }
-        @Override public void cancel(){verifyCaller();if(token!=null)token.cancel();android.os.Process.killProcess(android.os.Process.myPid());}
+        @Override public void cancel(){verifyCaller();android.os.Process.killProcess(android.os.Process.myPid());}
         @Override public void control(String action,String expression){verifyCaller();ScriptDebugger current=debugger;if(current!=null)current.control(action,expression);}
     };
     @Override public IBinder onBind(Intent intent){return binder;}
-    @Override public boolean onUnbind(Intent intent){if(token!=null)token.cancel();android.os.Process.killProcess(android.os.Process.myPid());return false;}
-    @Override public void onDestroy(){if(token!=null)token.cancel();worker.shutdownNow();watchdog.removeCallbacksAndMessages(null);super.onDestroy();}
+    @Override public boolean onUnbind(Intent intent){android.os.Process.killProcess(android.os.Process.myPid());return false;}
+    @Override public void onDestroy(){if(running)android.os.Process.killProcess(android.os.Process.myPid());worker.shutdownNow();watchdog.removeCallbacksAndMessages(null);super.onDestroy();}
 }

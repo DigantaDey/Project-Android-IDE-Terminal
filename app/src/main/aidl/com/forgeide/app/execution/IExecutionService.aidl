@@ -5,5 +5,5 @@ import com.forgeide.app.execution.IExecutionCallback;
 interface IExecutionService {
     void run(in ParcelFileDescriptor source, in Bundle configuration, IExecutionCallback callback);
     void cancel();
-    void control(String action, String expression);
+    oneway void control(String action, String expression);
 }
