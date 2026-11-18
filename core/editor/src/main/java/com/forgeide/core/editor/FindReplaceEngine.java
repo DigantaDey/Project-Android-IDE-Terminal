@@ -1,5 +1,6 @@
 package com.forgeide.core.editor;
 
+import com.forgeide.core.util.BoundedText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -76,7 +77,7 @@ public final class FindReplaceEngine {
             return null;
         }
         String text = document.snapshot();
-        Matcher m = compile(query).matcher(text);
+        Matcher m = compile(query).matcher(new BoundedText(text, 500));
         if (fromOffset >= 0 && fromOffset <= text.length() && m.find(fromOffset)) {
             return toMatch(m);
         }
@@ -110,16 +111,10 @@ public final class FindReplaceEngine {
             return out;
         }
         String text = document.snapshot();
-        Matcher m = compile(query).matcher(text);
+        Matcher m = compile(query).matcher(new BoundedText(text, 500));
         while (out.size() < maxResults && m.find()) {
             out.add(toMatch(m));
-            if (m.end() == m.start()) {
-                // Guard against zero-width regex loops
-                if (m.end() >= text.length()) {
-                    break;
-                }
-                m.region(m.end() + 1, text.length());
-            }
+
         }
         return out;
     }
@@ -133,7 +128,7 @@ public final class FindReplaceEngine {
      * Regex group references ($1, ${name}) are supported for regex queries.
      */
     public void replace(Query query, Match match, String replacement) {
-        String resolved = resolveReplacement(query, match, replacement);
+        String resolved = resolveReplacementAt(query, match, replacement);
         document.replace(match.range.start, match.range.length(), resolved);
     }
 
@@ -143,13 +138,16 @@ public final class FindReplaceEngine {
         if (matches.isEmpty()) {
             return 0;
         }
+        List<String> replacements = new ArrayList<>();
+        for (Match match : matches) replacements.add(resolveReplacementAt(query, match, replacement));
         if (undo != null) {
             undo.beginCompound();
         }
         try {
             // Apply from the end so earlier offsets remain valid.
             for (int i = matches.size() - 1; i >= 0; i--) {
-                replace(query, matches.get(i), replacement);
+                Match match = matches.get(i);
+                document.replace(match.range.start, match.range.length(), replacements.get(i));
             }
         } finally {
             if (undo != null) {
@@ -159,31 +157,14 @@ public final class FindReplaceEngine {
         return matches.size();
     }
 
-    static String resolveReplacement(Query query, Match match, String replacement) {
-        if (!query.regex || replacement.indexOf('$') < 0) {
-            return replacement;
-        }
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < replacement.length(); i++) {
-            char c = replacement.charAt(i);
-            if (c == '$' && i + 1 < replacement.length()) {
-                char next = replacement.charAt(i + 1);
-                if (Character.isDigit(next)) {
-                    int group = next - '0';
-                    if (group < match.groups.length && match.groups[group] != null) {
-                        sb.append(match.groups[group]);
-                        i++;
-                        continue;
-                    }
-                } else if (next == '$') {
-                    sb.append('$');
-                    i++;
-                    continue;
-                }
-            }
-            sb.append(c);
-        }
-        return sb.toString();
+    private String resolveReplacementAt(Query query, Match match, String replacement) {
+        if (!query.regex) return replacement;
+        Matcher matcher = compile(query).matcher(new BoundedText(document.snapshot(), 500));
+        if (!matcher.find(match.range.start) || matcher.start() != match.range.start || matcher.end() != match.range.end)
+            throw new IllegalStateException("Search result is stale");
+        StringBuffer buffer = new StringBuffer();
+        matcher.appendReplacement(buffer, replacement);
+        return buffer.substring(match.range.start);
     }
 
     private static Match toMatch(Matcher m) {

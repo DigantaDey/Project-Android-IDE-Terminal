@@ -37,7 +37,7 @@ public final class Settings {
         if (perProject) project.clear(); if (!Files.exists(file)) return;
         if (Files.size(file) > 65536) throw new IOException("Settings file too large");
         Map<String, Object> values;
-        try { values = Json.parseObject(Files.readString(file)); } catch (RuntimeException e) { throw new IOException("Settings are invalid; original file has not been overwritten", e); }
+        try { values = Json.parseObject(com.forgeide.core.util.AtomicFiles.readUtf8(file)); } catch (RuntimeException e) { throw new IOException("Settings are invalid; original file has not been overwritten", e); }
         for (Map.Entry<String, Object> e : values.entrySet()) if (global.containsKey(e.getKey())) {
             try { set(e.getKey(), e.getValue(), perProject); } catch (IllegalArgumentException ex) { throw new IOException("Invalid setting " + e.getKey(), ex); }
         }

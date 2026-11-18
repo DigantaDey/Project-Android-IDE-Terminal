@@ -8,6 +8,7 @@ import java.security.*;
 /** Same-directory, fsynced temporary files + atomic rename. Originals survive interrupted writes. */
 public final class AtomicFiles {
     private AtomicFiles() {}
+    public static String readUtf8(Path path) throws IOException { return new String(Files.readAllBytes(path), StandardCharsets.UTF_8); }
     public static void write(Path target, String content) throws IOException { write(target, content.getBytes(StandardCharsets.UTF_8)); }
     public static void write(Path target, byte[] content) throws IOException {
         Files.createDirectories(target.toAbsolutePath().getParent());

@@ -95,6 +95,7 @@ public final class Json {
         private int pos;
         private int line = 1;
         private int col = 1;
+        private int depth;
 
         Parser(String text) {
             this.text = text == null ? "" : text;
@@ -135,6 +136,11 @@ public final class Json {
         }
 
         Object parseValue() {
+            if (++depth > 128) throw error("JSON nesting exceeds 128 levels");
+            try { return parseValueInternal(); } finally { depth--; }
+        }
+
+        private Object parseValueInternal() {
             if (atEnd()) {
                 throw error("Unexpected end of input");
             }
@@ -200,6 +206,7 @@ public final class Json {
                 advance();
                 skipWhitespace();
                 Object value = parseValue();
+                if (map.containsKey(key)) throw error("Duplicate object key: " + key);
                 map.put(key, value);
                 skipWhitespace();
                 char c = peek();
@@ -373,7 +380,9 @@ public final class Json {
             String raw = text.substring(start, pos);
             try {
                 if (isDouble) {
-                    return Double.parseDouble(raw);
+                    double value = Double.parseDouble(raw);
+                    if (!Double.isFinite(value)) throw error("Number is outside the supported finite range");
+                    return value;
                 }
                 return Long.parseLong(raw);
             } catch (NumberFormatException e) {

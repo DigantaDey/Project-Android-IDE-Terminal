@@ -38,7 +38,7 @@ public final class ForgeApplication extends Application {
             projects=getFilesDir().toPath().resolve("projects");stateDir=getFilesDir().toPath().resolve("state");Files.createDirectories(projects);Files.createDirectories(stateDir);
             recovery=new RecoveryStore(getFilesDir().toPath().resolve("recovery"));
             try{settings.load(stateDir.resolve("settings.json"),false);}catch(IOException e){log(e.getMessage());}
-            String last="Welcome";if(Files.exists(stateDir.resolve("session.json")))try{last=JsonObject.parse(Files.readString(stateDir.resolve("session.json"))).getString("project",last);}catch(Exception e){log("Session restore: "+e.getMessage());}
+            String last="Welcome";if(Files.exists(stateDir.resolve("session.json")))try{last=JsonObject.parse(com.forgeide.core.util.AtomicFiles.readUtf8(stateDir.resolve("session.json"))).getString("project",last);}catch(Exception e){log("Session restore: "+e.getMessage());}
             if(!Files.exists(projects.resolve("Welcome")))createProject("Welcome","JavaScript");
             if(!com.forgeide.core.util.TextUtils.isValidFileName(last)||!Files.isDirectory(projects.resolve(last)))last="Welcome";
             loadProject(last);initialized=true;
@@ -64,9 +64,9 @@ public final class ForgeApplication extends Application {
         if(!com.forgeide.core.util.TextUtils.isValidFileName(name)||!Files.isDirectory(projects.resolve(name)))throw new IOException("Project does not exist");
         workspace=new Workspace(projects.resolve(name));project=name;documents.clear();activePath="";
         try{settings.load(workspace.resolve(".forge/settings.json"),true);}catch(IOException e){log(e.getMessage());}
-        Path bp=workspace.resolve(".forge/breakpoints.json");try{breakpoints.restore(Files.exists(bp)?Files.readString(bp):"[]");}catch(Exception e){log("Breakpoints not restored: "+e.getMessage());}
+        Path bp=workspace.resolve(".forge/breakpoints.json");try{breakpoints.restore(Files.exists(bp)?com.forgeide.core.util.AtomicFiles.readUtf8(bp):"[]");}catch(Exception e){log("Breakpoints not restored: "+e.getMessage());}
         Path session=stateDir.resolve("session.json");
-        if(Files.exists(session))try{JsonObject j=JsonObject.parse(Files.readString(session));if(j.getString("project","").equals(name)){for(String p:j.getStringList("files"))if(documents.size()<20&&Files.isRegularFile(workspace.resolve(p)))open(p);activePath=j.getString("active",activePath);}}catch(Exception e){log("Some previous tabs could not be restored: "+e.getMessage());}
+        if(Files.exists(session))try{JsonObject j=JsonObject.parse(com.forgeide.core.util.AtomicFiles.readUtf8(session));if(j.getString("project","").equals(name)){for(String p:j.getStringList("files"))if(documents.size()<20&&Files.isRegularFile(workspace.resolve(p)))open(p);activePath=j.getString("active",activePath);}}catch(Exception e){log("Some previous tabs could not be restored: "+e.getMessage());}
         try{for(RecoveryStore.Entry e:recovery.recover())if(e.project.equals(name)){OpenDocument doc=find(e.path);if(doc==null){doc=new OpenDocument(workspace,name,e.path,e.text,e.diskDigest);documents.add(doc);}else doc.content.replace(0,doc.content.length(),e.text);doc.diskDigest=e.diskDigest;doc.dirty=true;log("Recovered unsaved changes: "+e.path);}}catch(IOException e){log(e.getMessage());}
         if(documents.isEmpty()){for(String p:List.of("main.js","index.html","main.py","main.cpp","Main.java","README.md"))if(Files.isRegularFile(workspace.resolve(p))){open(p);break;}}
         if(find(activePath)==null)activePath=documents.isEmpty()?"":documents.get(0).path;

@@ -21,6 +21,7 @@ public final class ProjectSearch {
         if (query.pattern.isEmpty()) return out;
         for (String file : workspace.files(30000)) {
             cancel.throwIfCancelled(); if (out.size() >= limit) break;
+            if (file.startsWith(".forge/")) continue;
             String text;
             try { if (Files.size(workspace.resolve(file)) > 2 * 1024 * 1024) continue; text = workspace.read(file); } catch (IOException e) { continue; }
             String digest = AtomicFiles.sha256(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -28,7 +29,7 @@ public final class ProjectSearch {
             int offset = 0, line = 0;
             for (String content : text.split("\n", -1)) {
                 cancel.throwIfCancelled();
-                Matcher matcher = pattern.matcher(content);
+                Matcher matcher = pattern.matcher(new BoundedText(content, 300));
                 while (out.size() < limit && matcher.find()) { cancel.throwIfCancelled(); out.add(new Hit(file, content.length() > 300 ? content.substring(0, 300) : content, digest, line, matcher.start(), offset + matcher.start(), offset + matcher.end())); }
                 offset += content.length() + 1; line++;
             }
@@ -47,7 +48,16 @@ public final class ProjectSearch {
             Pattern p = new FindReplaceEngine(new Document()).compile(query);
             for (Hit h : hits) {
                 String original = text.substring(h.start, h.end);
-                String value = query.regex ? p.matcher(original).replaceFirst(replacement) : replacement;
+                String value = replacement;
+                if (query.regex) {
+                    int lineStart = text.lastIndexOf('\n', Math.max(0, h.start - 1)) + 1;
+                    if (h.start == 0) lineStart = 0;
+                    int lineEnd = text.indexOf('\n', h.end); if (lineEnd < 0) lineEnd = text.length();
+                    Matcher matcher = p.matcher(new BoundedText(text.substring(lineStart, lineEnd), 300));
+                    if (!matcher.find(h.start - lineStart) || matcher.end() != h.end - lineStart) throw new IOException("Search result is stale");
+                    StringBuffer buffer = new StringBuffer(); matcher.appendReplacement(buffer, replacement);
+                    value = buffer.substring(matcher.start());
+                }
                 next.replace(h.start, h.end, value); changed++;
             }
             w.writeChecked(file, next.toString(), digest);
