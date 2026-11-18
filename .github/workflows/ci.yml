@@ -38,8 +38,19 @@ jobs:
           npm --prefix tools/format run check
       - name: Test CI report helpers
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - uses: actions/cache/restore@v4
+        id: native-payload-cache
+        with:
+          path: build/native/assets
+          key: native-payload-v1-${{ runner.os }}-${{ hashFiles('tools/native/runtime-lock.json', 'scripts/native-bundle.py') }}
       - name: Build pinned offline native payloads (build-time downloads only)
+        if: steps.native-payload-cache.outputs.cache-hit != 'true'
         run: python3 scripts/native-bundle.py build
+      - uses: actions/cache/save@v4
+        if: steps.native-payload-cache.outputs.cache-hit != 'true'
+        with:
+          path: build/native/assets
+          key: native-payload-v1-${{ runner.os }}-${{ hashFiles('tools/native/runtime-lock.json', 'scripts/native-bundle.py') }}
       - name: Compile, test and lint
         run: |
           set -o pipefail
