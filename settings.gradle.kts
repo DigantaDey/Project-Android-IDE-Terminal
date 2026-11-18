@@ -35,3 +35,5 @@ include(":core:settings")
 include(":core:recovery")
 include(":core:commands")
 include(":core:runtime")
+
+include(":runtime-api", ":native-runtime", ":terminal-ui")

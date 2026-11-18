@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <queries><package android:name="com.forgeide.app" /></queries>
+    <application android:allowBackup="false" android:label="Forge Native Runtime" android:usesCleartextTraffic="false" android:extractNativeLibs="true">
+        <meta-data android:name="forge.native.bundle" android:value="${forgeBundleId}" />
+        <service android:name=".NativeRuntimeService" android:exported="true" android:stopWithTask="true" android:permission="com.forgeide.app.permission.NATIVE_RUNTIME" />
+    </application>
+</manifest>

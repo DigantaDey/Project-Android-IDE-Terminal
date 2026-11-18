@@ -1722,6 +1722,7 @@ public final class MainActivity extends Activity {
                 showPanel("Terminal");
             })
         );
+        tools.addView(action(">_", "Open native Bash PTY", this::openNativeTerminal));
         tools.addView(action("■", "Stop execution", this::stop));
         panelBody.addView(tools);
         terminalText = scrollText(terminalDisplay(terminal));
@@ -1896,6 +1897,7 @@ public final class MainActivity extends Activity {
         if (app.runCancel != null) app.runCancel.cancel();
         taskCancel.cancel();
         app.execution.cancel();
+        app.nativeRuntime.stopAll();
         appendOutput("\n[execution / task stopped]\n", null);
         refreshStatus();
     }
@@ -1963,7 +1965,9 @@ public final class MainActivity extends Activity {
         Toolchain provider;
         try {
             provider = configured == null
-                ? app.toolchains.forLanguage(runtime)
+                ? debug && runtime.equals("javascript")
+                    ? app.toolchains.require("javascript")
+                    : app.toolchains.forLanguage(runtime)
                 : app.toolchains.requireForLanguage(configured.toolchain, runtime);
         } catch (IllegalArgumentException | IllegalStateException unavailable) {
             error(unavailable);
@@ -1981,7 +1985,7 @@ public final class MainActivity extends Activity {
             return;
         }
         try {
-            app.executionPolicy().requireSupported(provider.restrictions());
+            app.executionPolicy(provider).requireSupported(provider.restrictions());
         } catch (SecurityException unsupported) {
             error(unsupported);
             return;
@@ -2043,7 +2047,7 @@ public final class MainActivity extends Activity {
                         );
                         app.debugState = "";
                         if (terminal == null) showPanel(debug ? "Debugger" : "Output");
-                        SandboxPolicy policy = app.executionPolicy();
+                        SandboxPolicy policy = app.executionPolicy(provider);
                         try {
                             executeProvider(
                                 provider,
@@ -2160,9 +2164,93 @@ public final class MainActivity extends Activity {
     }
 
     private void toolchains() {
+        List<String> entries = new ArrayList<>();
+        entries.add("Runtime status / offline installation");
+        for (String tool : NativeTools.ORDER)
+            entries.add((app.settings.bool(NativeTools.key(tool)) ? "✓  " : "○  ") + NativeTools.label(tool));
+        entries.add("Native network: " + (app.settings.bool("native.network") ? "ON" : "OFF"));
+        entries.add("npm install scripts: " + (app.settings.bool("native.installScripts") ? "ON" : "OFF"));
+        entries.add("Open native Bash PTY");
+        entries.add("Built-in tools / capability boundaries");
+        choose("Toolchains & native runtimes", entries, i -> {
+            if (i == 0) textDialog(
+                "Offline native companion",
+                (app.nativeRuntime.installationProblem().isEmpty()
+                            ? "Matching runtime is installed."
+                            : app.nativeRuntime.installationProblem()) +
+                    "\n\nDownload the offline bundle from this branch's successful GitHub CI run. Extract and install BOTH APKs from that same bundle using Android's package installer; allow installation only from a source you trust. No credentials or automatic downloads are needed.\n\nCompanion package: com.forgex. It deliberately targets Android's legacy execution compatibility mode. The IDE still targets API 35. Supports primary-user arm64-v8a / x86_64 devices; sideloaded development builds, not a Play-ready distribution.\n\nEnabled native tools receive an explicit disposable project copy, never IDE credentials or live storage grants. Native tools share the companion UID with each other. Turning a switch off stops the native session and blocks Forge launches; it does not remove APK bytes or prohibit a shell from implementing other languages.\n\nFile runs are ephemeral. The native PTY keeps its copy only while the session is alive: export changes before exit. One native run/PTY at a time; six existing scoped-shell sessions remain available."
+            );
+            else if (i <= NativeTools.ORDER.size()) toggleNative(
+                NativeTools.key(NativeTools.ORDER.get(i - 1))
+            );
+            else if (i == 6) toggleNative("native.network");
+            else if (i == 7) toggleNative("native.installScripts");
+            else if (i == 8) openNativeTerminal();
+            else builtinCapabilities();
+        });
+    }
+
+    private void toggleNative(String key) {
+        boolean enable = !app.settings.bool(key);
+        Runnable change = () -> {
+            app.nativeRuntime.stopAll();
+            app.settings.set(key, enable, false);
+            if (enable && key.equals("native.npm")) app.settings.set("native.node", true, false);
+            if (!enable && key.equals("native.node")) app.settings.set("native.npm", false, false);
+            background(
+                "Saving native tool consent…",
+                () -> {
+                    app.settings.save(app.stateDir.resolve("settings.json"), false);
+                    return true;
+                },
+                v -> toolchains()
+            );
+        };
+        if (!enable) {
+            change.run();
+            return;
+        }
+        String warning = key.equals("native.network")
+            ? "Native programs and npm will be allowed Internet access. Dependencies run untrusted code; review the project and explicitly requested downloads. Changing this setting stops the current native session."
+            : key.equals("native.installScripts")
+                ? "npm lifecycle scripts can execute arbitrary native code inside the companion. This is separate from downloading a dependency. Leave this off unless you trust the package. Changing it stops the current native session."
+                : "Enable this bundled native tool? Native code can read/write the disposable project copy, access the companion's own files and create processes. It cannot inherit the IDE's private files, GitHub vault or SAF permissions. The runtime is a legacy-compatibility sideloaded app, not the stricter isolated interpreter. Native tools share its UID. Network remains controlled separately. Enabling npm also enables Node.js.";
+        new AlertDialog.Builder(this)
+            .setTitle("Enable native capability?")
+            .setMessage(warning)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Enable", (d, w) -> change.run())
+            .show();
+    }
+
+    private void openNativeTerminal() {
+        if (!app.nativeRuntime.available("bash")) {
+            toolchains();
+            return;
+        }
+        if (app.settings.bool("requireHardLimits")) {
+            error(
+                new SecurityException(
+                    "Native tools cannot enforce hard CPU/memory quotas; strict policy refuses execution"
+                )
+            );
+            return;
+        }
+        if (app.isRunning()) {
+            toast("Stop the active run first");
+            return;
+        }
+        fileChange(
+            () -> app.project,
+            project ->
+                startActivity(new Intent(this, com.forgeide.app.nativebridge.NativeTerminalActivity.class))
+        );
+    }
+
+    private void builtinCapabilities() {
         textDialog(
             "Toolchains & dependencies",
-            "INSTALLED OFFLINE\nJavaScript · Rhino ES6 interpreter\n  Isolated Android UID, no Java/Android interop\n  No Node.js, require(), npm or filesystem APIs\n  Conditional breakpoints, stepping, stack, watches\nHTML/CSS · static offline preview (scripts disabled)\nSQLite · isolated in-memory SQL execution\nJSON · validation + lossless layout formatting\nProject shell · scoped file commands; not a PTY\nGit · pure Java, HTTPS; native hooks disabled\n\nADDITIONAL ISOLATED PROVIDERS REQUIRED\nC/C++ · Clang + ABI-compatible runtime + debugger\nJava · compiler, Android-compatible execution provider\nPython · interpreter + isolated filesystem provider\nTypeScript · compiler + runtime provider\nLSP/DAP servers · compatible transport/provider\nBlack / Prettier / clang-format / ESLint\nnpm / pip / Maven / Gradle / CMake / Make\n\nNo runtimes or packages are downloaded automatically. Android cannot safely execute arbitrary desktop binaries. Hard memory ceilings and CPU-share quotas are unavailable; strict policies block execution rather than weakening isolation."
+            "BUILT INTO THE IDE\nJavaScript · isolated Rhino ES6 interpreter + debugger\nSQLite · isolated in-memory SQL\nHTML/CSS · static offline preview\nJSON · validation + layout formatting\nProject shell · scoped file commands, not Bash\nGit · pure Java, HTTPS; hooks disabled\n\nOFFLINE NATIVE COMPANION\nClang / C++ / LLD, CPython, Node.js, npm, Bash and a real PTY are in the separate runtime APK. Enable individual tools in Settings. They use a disposable project copy and a separate Android UID. Network and npm installation scripts default off.\n\nNot bundled: Java SDK, TypeScript compiler, semantic LSP/DAP servers or additional language debuggers. Native code can create processes; the interpreter's no-process policy is not claimed. Hard CPU/memory quotas remain unsupported. No on-device runtime downloads or hidden package installations."
         );
     }
 
@@ -3165,7 +3253,7 @@ public final class MainActivity extends Activity {
                 "Project run configuration",
                 "Project-specific settings JSON",
                 "Keyboard shortcuts",
-                "Toolchains / package support",
+                "Toolchains & native runtime switches",
                 "Git / GitHub",
                 "Storage & recovery status",
                 "About / licenses"
@@ -3479,7 +3567,8 @@ public final class MainActivity extends Activity {
         addCommand("problems", "Open problems panel", "", () -> showPanel("Problems"));
         addCommand("git", "Open Git changes", "", () -> showPanel("Git"));
         addCommand("settings", "Open settings / change theme", "Ctrl+,", this::settingsDialog);
-        addCommand("toolchains", "Toolchain / package manager availability", "", this::toolchains);
+        addCommand("toolchains", "Toolchains / native runtime switches", "", this::toolchains);
+        addCommand("native-terminal", "Open native Bash PTY", "", this::openNativeTerminal);
         addCommand("restore", "Restore deleted file", "", this::restoreTrash);
         addCommand("licenses", "Third-party notices", "", this::thirdPartyNotices);
     }
