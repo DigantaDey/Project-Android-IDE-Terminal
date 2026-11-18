@@ -52,7 +52,7 @@ Above 512 KiB the app enters large-file mode and skips whole-file lexical analys
 
 ## Search and safe replacement
 
-Document find supports literal/regex, case sensitivity, whole words, next/previous, replace, and replace-all. Regex evaluation has a work/time budget; pathological patterns fail instead of scanning forever. Java regex replacement syntax supports `$1` and `${name}`; escape a literal dollar with a backslash.
+Document find supports literal/regex, case sensitivity, whole words, next/previous, replace, and replace-all. Regex evaluation has a work/time budget; enumerated matches/captures also have memory limits (20,000 enumerated results, 100 capture groups, and bounded captured text). Counting and replace-all stream rather than allocating every match. Oversized replacements are rejected before changing the document; pathological patterns fail instead of scanning forever. Java regex replacement syntax supports `$1` and `${name}`; escape a literal dollar with a backslash.
 
 Project search is line-scoped and bounded. Results link to source. It skips private tool metadata, Git, trash, dependency/build trees, binary/non-UTF-8 files, and files larger than 2 MiB. The UI shows at most 1,000 matches, so replacement only affects the previewed results.
 

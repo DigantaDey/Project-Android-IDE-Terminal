@@ -812,7 +812,7 @@ public final class MainActivity extends Activity {
                         else fileMenu(path);
                         return true;
                     });
-                    treeRows.addView(item, new LinearLayout.LayoutParams(-1, dp(38)));
+                    treeRows.addView(item, new LinearLayout.LayoutParams(-1, dp(44)));
                 }
             }
         );
@@ -2135,6 +2135,10 @@ public final class MainActivity extends Activity {
                     problems.addAll(found);
                     applyDiagnostics();
                 });
+            } catch (StackOverflowError excessiveNesting) {
+                app.log(
+                    "Syntax analysis stopped: excessive nesting. The document is still editable and recoverable."
+                );
             } catch (Exception e) {
                 app.log("Analysis: " + e.getMessage());
             }

@@ -111,7 +111,9 @@ public final class SafeGit implements GitService {
         );
         String config = com.forgeide.core.util.AtomicFiles.readUtf8(workspace.resolve(".git/config"));
         if (
-            config.matches("(?is).*(\\[\\s*(include|includeIf|filter|url|gpg)\\b|sshCommand|hooksPath).*")
+            config.matches(
+                "(?is).*(\\[\\s*(include|includeIf|filter|url|gpg)\\b|sshCommand|hooksPath|cookieFile|saveCookies|sslCAInfo|sslCert|sslKey|extraHeader).*"
+            )
         ) throw new IOException("Repository config contains unsupported external integrations");
         Repository r = new FileRepositoryBuilder()
             .setGitDir(meta.toFile())
@@ -119,6 +121,11 @@ public final class SafeGit implements GitService {
             .setFS(new NoExecFS())
             .build();
         r.getConfig().setString("http", null, "followRedirects", "false");
+        r.getConfig().setBoolean("http", null, "sslVerify", true);
+        for (String target : r.getConfig().getSubsections("http")) {
+            r.getConfig().setString("http", target, "followRedirects", "false");
+            r.getConfig().setBoolean("http", target, "sslVerify", true);
+        }
         r.getConfig().setBoolean("commit", null, "gpgsign", false);
         r.getConfig().setBoolean("core", null, "symlinks", false);
         git = new Git(r);
@@ -184,9 +191,25 @@ public final class SafeGit implements GitService {
     @Override
     public String diff(String file) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        try (DiffFormatter formatter = new DiffFormatter(bytes)) {
+        boolean[] truncated = { false };
+        OutputStream bounded = new OutputStream() {
+            @Override
+            public void write(int value) {
+                if (bytes.size() < 262144) bytes.write(value);
+                else truncated[0] = true;
+            }
+
+            @Override
+            public void write(byte[] value, int offset, int length) {
+                int kept = Math.min(length, Math.max(0, 262144 - bytes.size()));
+                bytes.write(value, offset, kept);
+                if (kept < length) truncated[0] = true;
+            }
+        };
+        try (DiffFormatter formatter = new DiffFormatter(bounded)) {
             formatter.setRepository(git().getRepository());
             formatter.setContext(3);
+            formatter.setBinaryFileThreshold(1024 * 1024);
             if (file != null && !file.isEmpty()) formatter.setPathFilter(PathFilter.create(file));
             Repository repository = git().getRepository();
             for (org.eclipse.jgit.diff.DiffEntry e : formatter.scan(
@@ -197,7 +220,7 @@ public final class SafeGit implements GitService {
             formatter.flush();
         }
         String text = bytes.toString(StandardCharsets.UTF_8.name());
-        return text.length() > 262144 ? text.substring(0, 262144) + "\n[diff truncated]" : text;
+        return truncated[0] ? text + "\n[diff truncated]" : text;
     }
 
     @Override

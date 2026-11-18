@@ -5,20 +5,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
-/**
- * Find/replace engine over a {@link Document}. Supports literal and regex search,
- * case sensitivity, whole-word matching, wrap-around navigation and replace-all.
- */
+/** Bounded literal/regex navigation and single-pass, atomic replacement over a document snapshot. */
 public final class FindReplaceEngine {
+
+    private static final int MAX_RESULTS = 20000,
+        MAX_CAPTURE_CHARS = 262144,
+        MAX_REPLACED_CHARS = 8 * 1024 * 1024;
 
     public static final class Query {
 
         public final String pattern;
-        public final boolean regex;
-        public final boolean caseSensitive;
-        public final boolean wholeWord;
+        public final boolean regex, caseSensitive, wholeWord;
 
         public Query(String pattern, boolean regex, boolean caseSensitive, boolean wholeWord) {
             this.pattern = pattern == null ? "" : pattern;
@@ -32,7 +30,6 @@ public final class FindReplaceEngine {
         }
     }
 
-    /** A single match; {@code groups} holds regex capture groups (group 0 = full match). */
     public static final class Match {
 
         public final Range range;
@@ -50,132 +47,202 @@ public final class FindReplaceEngine {
         this.document = document;
     }
 
-    /** Compiles the query into a Pattern, or throws PatternSyntaxException for bad regex. */
     public Pattern compile(Query query) {
-        String pattern = query.regex ? query.pattern : Pattern.quote(query.pattern);
-        if (query.wholeWord) {
-            pattern = "\\b(?:" + pattern + ")\\b";
-        }
-        int flags = query.caseSensitive ? 0 : (Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-        flags |= Pattern.MULTILINE;
-        return Pattern.compile(pattern, flags);
+        String expression = query.regex ? query.pattern : Pattern.quote(query.pattern);
+        if (query.wholeWord) expression = "\\b(?:" + expression + ")\\b";
+        Pattern pattern = Pattern.compile(
+            expression,
+            Pattern.MULTILINE | (query.caseSensitive ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
+        );
+        if (pattern.matcher("").groupCount() > 100) throw new IllegalArgumentException(
+            "Regex capture groups are limited to 100"
+        );
+        return pattern;
     }
 
     public boolean isValid(Query query) {
-        if (query.pattern.isEmpty()) {
-            return false;
-        }
+        if (query.pattern.isEmpty()) return false;
         try {
             compile(query);
             return true;
-        } catch (PatternSyntaxException e) {
+        } catch (IllegalArgumentException invalid) {
             return false;
         }
     }
 
-    /** Finds the next match at or after {@code fromOffset}; wraps around if {@code wrap}. */
+    private Matcher matcher(Query query, String text) {
+        return compile(query).matcher(new BoundedText(text, 500));
+    }
+
     public Match findNext(Query query, int fromOffset, boolean wrap) {
-        if (!isValid(query)) {
-            return null;
-        }
+        if (!isValid(query)) return null;
         String text = document.snapshot();
-        Matcher m = compile(query).matcher(new BoundedText(text, 500));
-        if (fromOffset >= 0 && fromOffset <= text.length() && m.find(fromOffset)) {
-            return toMatch(m);
-        }
-        if (wrap && m.find(0)) {
-            return toMatch(m);
-        }
-        return null;
+        Matcher matcher = matcher(query, text);
+        if (fromOffset >= 0 && fromOffset <= text.length() && matcher.find(fromOffset)) return toMatch(
+            matcher
+        );
+        return wrap && matcher.find(0) ? toMatch(matcher) : null;
     }
 
-    /** Finds the previous match before {@code fromOffset}; wraps around if {@code wrap}. */
     public Match findPrevious(Query query, int fromOffset, boolean wrap) {
-        List<Match> all = findAll(query, Integer.MAX_VALUE);
-        Match previous = null;
-        for (Match match : all) {
-            if (match.range.start < fromOffset) {
-                previous = match;
-            } else {
-                break;
-            }
+        if (!isValid(query)) return null;
+        Matcher matcher = matcher(query, document.snapshot());
+        Match previous = null,
+            last = null;
+        while (matcher.find()) {
+            last = toMatch(matcher);
+            if (matcher.start() < fromOffset) previous = last;
+            else if (previous != null || !wrap) break;
         }
-        if (previous == null && wrap && !all.isEmpty()) {
-            return all.get(all.size() - 1);
-        }
-        return previous;
+        return previous == null && wrap ? last : previous;
     }
 
-    /** All matches, capped at {@code maxResults} to keep large files responsive. */
+    /** Enumerated metadata is capped. Counting and replacement stream instead of allocating every match. */
     public List<Match> findAll(Query query, int maxResults) {
-        List<Match> out = new ArrayList<>();
-        if (!isValid(query)) {
-            return out;
+        List<Match> result = new ArrayList<>();
+        if (!isValid(query) || maxResults <= 0) return result;
+        Matcher matcher = matcher(query, document.snapshot());
+        int limit = Math.min(MAX_RESULTS, maxResults),
+            captureChars = 0;
+        while (result.size() < limit && matcher.find()) {
+            Match match = toMatch(matcher);
+            for (String group : match.groups) if (group != null) captureChars += group.length();
+            if (captureChars > 4 * 1024 * 1024) throw new BoundedText.LimitExceeded();
+            result.add(match);
         }
-        String text = document.snapshot();
-        Matcher m = compile(query).matcher(new BoundedText(text, 500));
-        while (out.size() < maxResults && m.find()) {
-            out.add(toMatch(m));
-        }
-        return out;
+        if (
+            maxResults > MAX_RESULTS && result.size() == MAX_RESULTS && matcher.find()
+        ) throw new BoundedText.LimitExceeded();
+        return result;
     }
 
     public int count(Query query) {
-        return findAll(query, Integer.MAX_VALUE).size();
+        if (!isValid(query)) return 0;
+        Matcher matcher = matcher(query, document.snapshot());
+        int count = 0;
+        long deadline = System.nanoTime() + 500_000_000L;
+        while (matcher.find()) {
+            count++;
+            checkDeadline(count, deadline);
+        }
+        return count;
     }
 
-    /**
-     * Replaces the current match range with the replacement template.
-     * Regex group references ($1, ${name}) are supported for regex queries.
-     */
     public void replace(Query query, Match match, String replacement) {
-        String resolved = resolveReplacementAt(query, match, replacement);
-        document.replace(match.range.start, match.range.length(), resolved);
-    }
-
-    /** Replaces every match atomically (single undo step). Returns the number replaced. */
-    public int replaceAll(Query query, String replacement, UndoRedoManager undo) {
-        List<Match> matches = findAll(query, Integer.MAX_VALUE);
-        if (matches.isEmpty()) {
-            return 0;
-        }
-        List<String> replacements = new ArrayList<>();
-        for (Match match : matches) replacements.add(resolveReplacementAt(query, match, replacement));
-        if (undo != null) {
-            undo.beginCompound();
-        }
-        try {
-            // Apply from the end so earlier offsets remain valid.
-            for (int i = matches.size() - 1; i >= 0; i--) {
-                Match match = matches.get(i);
-                document.replace(match.range.start, match.range.length(), replacements.get(i));
-            }
-        } finally {
-            if (undo != null) {
-                undo.endCompound();
-            }
-        }
-        return matches.size();
-    }
-
-    private String resolveReplacementAt(Query query, Match match, String replacement) {
-        if (!query.regex) return replacement;
-        Matcher matcher = compile(query).matcher(new BoundedText(document.snapshot(), 500));
+        String source = document.snapshot();
+        Matcher matcher = matcher(query, source);
         if (
             !matcher.find(match.range.start) ||
             matcher.start() != match.range.start ||
             matcher.end() != match.range.end
         ) throw new IllegalStateException("Search result is stale");
-        StringBuffer buffer = new StringBuffer();
-        matcher.appendReplacement(buffer, replacement);
-        return buffer.substring(match.range.start);
+        StringBuilder resolved = new StringBuilder();
+        expand(resolved, matcher, replacement, query.regex);
+        document.replace(match.range.start, match.range.length(), resolved.toString());
     }
 
-    private static Match toMatch(Matcher m) {
-        String[] groups = new String[m.groupCount() + 1];
-        for (int i = 0; i <= m.groupCount(); i++) {
-            groups[i] = m.group(i);
+    /** Validate and construct the entire result before making one undoable edit. No quadratic rescans. */
+    public int replaceAll(Query query, String replacement, UndoRedoManager undo) {
+        if (!isValid(query)) return 0;
+        String source = document.snapshot();
+        Matcher matcher = matcher(query, source);
+        StringBuilder result = new StringBuilder(Math.min(source.length(), MAX_REPLACED_CHARS));
+        int cursor = 0,
+            count = 0;
+        long deadline = System.nanoTime() + 500_000_000L;
+        while (matcher.find()) {
+            append(result, source, cursor, matcher.start());
+            expand(result, matcher, replacement, query.regex);
+            cursor = matcher.end();
+            count++;
+            checkDeadline(count, deadline);
         }
-        return new Match(new Range(m.start(), m.end()), groups);
+        if (count == 0) return 0;
+        append(result, source, cursor, source.length());
+        if (!source.equals(document.snapshot())) throw new IllegalStateException(
+            "Document changed during replacement"
+        );
+        if (undo != null) undo.beginCompound();
+        try {
+            document.replace(0, source.length(), result.toString());
+        } finally {
+            if (undo != null) undo.endCompound();
+        }
+        return count;
+    }
+
+    private static void checkDeadline(int count, long deadline) {
+        if (
+            (count & 1023) == 0 && (System.nanoTime() > deadline || Thread.currentThread().isInterrupted())
+        ) throw new BoundedText.LimitExceeded();
+    }
+
+    private static void append(StringBuilder result, String value, int from, int to) {
+        if ((long) result.length() + to - from > MAX_REPLACED_CHARS) throw new IllegalArgumentException(
+            "Replacement exceeds the 8 Mi-character safety limit"
+        );
+        result.append(value, from, to);
+    }
+
+    private static void append(StringBuilder result, String value) {
+        if (value != null) append(result, value, 0, value.length());
+    }
+
+    /** Java Matcher replacement grammar, appended with pre-allocation growth checks for each capture. */
+    private static void expand(StringBuilder result, Matcher matcher, String replacement, boolean regex) {
+        if (!regex) {
+            append(result, replacement);
+            return;
+        }
+        for (int index = 0; index < replacement.length(); ) {
+            char c = replacement.charAt(index++);
+            if (c == '\\') {
+                if (index == replacement.length()) throw new IllegalArgumentException(
+                    "Trailing replacement escape"
+                );
+                append(result, replacement, index, index + 1);
+                index++;
+            } else if (c == '$') {
+                if (index == replacement.length()) throw new IllegalArgumentException(
+                    "Missing capture group after dollar sign"
+                );
+                if (replacement.charAt(index) == '{') {
+                    int end = replacement.indexOf('}', index + 1);
+                    if (end < 0) throw new IllegalArgumentException("Unclosed named capture group");
+                    append(result, matcher.group(replacement.substring(index + 1, end)));
+                    index = end + 1;
+                } else {
+                    char digit = replacement.charAt(index);
+                    if (digit < '0' || digit > '9') throw new IllegalArgumentException(
+                        "Invalid replacement capture group"
+                    );
+                    int group = digit - '0';
+                    index++;
+                    if (group > matcher.groupCount()) throw new IndexOutOfBoundsException(
+                        "No group " + group
+                    );
+                    while (index < replacement.length()) {
+                        digit = replacement.charAt(index);
+                        if (digit < '0' || digit > '9') break;
+                        int next = group * 10 + digit - '0';
+                        if (next > matcher.groupCount()) break;
+                        group = next;
+                        index++;
+                    }
+                    append(result, matcher.group(group));
+                }
+            } else append(result, replacement, index - 1, index);
+        }
+    }
+
+    private static Match toMatch(Matcher matcher) {
+        String[] groups = new String[matcher.groupCount() + 1];
+        int chars = 0;
+        for (int i = 0; i < groups.length; i++) {
+            if (matcher.start(i) >= 0) chars += matcher.end(i) - matcher.start(i);
+            if (chars > MAX_CAPTURE_CHARS) throw new BoundedText.LimitExceeded();
+            groups[i] = matcher.group(i);
+        }
+        return new Match(new Range(matcher.start(), matcher.end()), groups);
     }
 }
