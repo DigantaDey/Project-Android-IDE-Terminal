@@ -12,7 +12,7 @@ android {
         minSdk = 26
         // Opt-in sideloaded companion only. Android's compatibility execution policy is required.
         targetSdk = 28
-        versionCode = 1
+        versionCode = 2
         versionName = "0.2.0"
         manifestPlaceholders["forgeBundleId"] = nativeBundleId
         ndk { abiFilters += setOf("arm64-v8a", "x86_64") }

@@ -50,6 +50,8 @@ public final class NativeRuntimeService extends Service {
         super.onCreate();
         try {
             payload = new NativePayload(this);
+            // A previous service process may have died before Java finally/onDestroy.
+            if (payload.supported()) NativePty.killAll();
         } catch (Exception e) {
             unavailable = e.toString();
         }
@@ -206,9 +208,11 @@ public final class NativeRuntimeService extends Service {
     private void launch(Session s, ParcelFileDescriptor snapshot, Bundle options) {
         try (InputStream source = new ParcelFileDescriptor.AutoCloseInputStream(snapshot)) {
             check(s);
+            Path sessions = getCacheDir().toPath().resolve("sessions");
+            // Discard copies left by a process kill before handing out another copy.
+            NativePayload.delete(sessions);
             payload.ensure();
             check(s);
-            Path sessions = getCacheDir().toPath().resolve("sessions");
             Files.createDirectories(sessions);
             s.root = Files.createDirectory(sessions.resolve(s.id));
             Path project = Files.createDirectory(s.root.resolve("project"));

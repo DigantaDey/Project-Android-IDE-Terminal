@@ -91,8 +91,16 @@ final class NativePayload {
         }
     }
 
+    void ensure() throws Exception {
+        // An unbound Service instance can still be unwinding a cancelled install
+        // while Android creates its replacement in the same process.
+        synchronized (NativePayload.class) {
+            ensureLocked();
+        }
+    }
+
     @SuppressWarnings("unchecked")
-    synchronized void ensure() throws Exception {
+    private void ensureLocked() throws Exception {
         if (!supported()) throw new IOException("Native runtime supports arm64-v8a and x86_64 only");
         // Android may bind-mount /data/data and /data/user/0 rather than symlinking them.
         // Compare inode identity, not canonical path text; secondary users still fail closed.

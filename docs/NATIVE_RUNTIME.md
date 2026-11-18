@@ -94,8 +94,9 @@ boundary is a security guarantee.
 
 The companion package is `com.forgex`, separate from `com.forgeide.app`. Its exact
 length supports relocating upstream's compiled-in prefix without corrupting ELF
-files. Signature permission, calling UID, protocol and bundle-ID checks protect
-the private Binder protocol. Install both APKs from one build. No app credential,
+files. Signature permission, calling UID, security-protocol revision and bundle-ID checks protect
+the private Binder protocol. Protocol revision 2 rejects older companions even if
+their tool payload lock happens to match. Install both APKs from one build. No app credential,
 GitHub token, Keystore key, live project FD, or SAF authority is passed to a child.
 The child inherits only its PTY descriptors and an explicit sanitized environment.
 Runtime-generated data and output are untrusted.
@@ -108,7 +109,9 @@ Binder transactions, or use io_uring to bypass the syscall policy. Basic process
 open-FD and individual-file resource limits apply, but no hard aggregate memory,
 disk-volume or CPU-share quota is claimed. Strict hard-limit policy refuses native
 execution. Stop/deadline kills companion-UID native jobs, including job-control
-process groups; no IDE-owned native execution fallback is allowed. OEM execution
+process groups, and reaps adopted native descendants. Service startup clears
+orphan jobs; the next run removes project copies left by a previous process kill.
+No IDE-owned native execution fallback is allowed. OEM execution
 policies may still reject compatibility binaries, which is an error, not a
 successful run.
 

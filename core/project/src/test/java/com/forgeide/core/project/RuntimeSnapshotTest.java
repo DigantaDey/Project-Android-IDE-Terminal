@@ -33,6 +33,63 @@ public class RuntimeSnapshotTest {
     }
 
     @Test
+    public void emptyProjectHasAnExplicitRootForAndroid26AndCanBeImported() throws Exception {
+        Workspace project = new Workspace(tmp.newFolder().toPath());
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        RuntimeSnapshot.write(project, bytes);
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+            ZipEntry root = zip.getNextEntry();
+            assertNotNull(root);
+            assertEquals("./", root.getName());
+            assertTrue(root.isDirectory());
+        }
+        Path copy = tmp.newFolder().toPath();
+        RuntimeSnapshot.read(copy, new ByteArrayInputStream(bytes.toByteArray()));
+        assertTrue(new Workspace(copy).list("").isEmpty());
+        Workspace imported = new Workspace(tmp.newFolder().toPath());
+        ProjectArchive.importZip(imported, new ByteArrayInputStream(bytes.toByteArray()));
+        assertTrue(imported.list("").isEmpty());
+        ByteArrayOutputStream backup = new ByteArrayOutputStream();
+        ProjectArchive.exportZip(imported, backup);
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(backup.toByteArray()))) {
+            assertEquals("./", zip.getNextEntry().getName());
+        }
+    }
+
+    @Test
+    public void preservesEmptyWorkingDirectoriesWithoutManufacturingFiles() throws Exception {
+        Workspace project = new Workspace(tmp.newFolder().toPath());
+        project.mkdir("empty/nested");
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        RuntimeSnapshot.write(project, bytes);
+        Path copy = tmp.newFolder().toPath();
+        RuntimeSnapshot.read(copy, new ByteArrayInputStream(bytes.toByteArray()));
+        assertTrue(Files.isDirectory(copy.resolve("empty/nested")));
+        assertTrue(new Workspace(copy).list("empty/nested").isEmpty());
+    }
+
+    @Test
+    public void rootMarkerCannotSmuggleFilesOrTraversal() throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            zip.putNextEntry(new ZipEntry("./"));
+            zip.write(42);
+            zip.closeEntry();
+        }
+        try {
+            RuntimeSnapshot.read(tmp.newFolder().toPath(), new ByteArrayInputStream(bytes.toByteArray()));
+            fail();
+        } catch (IOException expected) {}
+        try {
+            ProjectArchive.importZip(
+                new Workspace(tmp.newFolder().toPath()),
+                new ByteArrayInputStream(bytes.toByteArray())
+            );
+            fail();
+        } catch (IOException expected) {}
+    }
+
+    @Test
     public void refusesTraversalAndPrivateArchiveEntries() throws Exception {
         for (String name : new String[] {
             "../escape",
@@ -40,6 +97,9 @@ public class RuntimeSnapshotTest {
             ".git/config",
             ".forge/token",
             "a/../b",
+            "./evil",
+            "./.git/config",
+            ".",
             "a\\b",
         }) {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();

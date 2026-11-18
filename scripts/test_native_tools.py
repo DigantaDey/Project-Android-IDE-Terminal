@@ -5,6 +5,8 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import re
+import xml.etree.ElementTree as ET
 import unittest
 from unittest import mock
 
@@ -38,6 +40,19 @@ class NativeToolsTests(unittest.TestCase):
         value = bundle.paragraphs("Package: a\nDescription: first\n second\n\nPackage: b\nVersion: 1\n")
         self.assertEqual("first\nsecond", value[0]["Description"])
         self.assertEqual("b", value[1]["Package"])
+
+    def test_companion_manifest_matches_the_required_security_protocol(self):
+        source = (ROOT / "core/toolchain/src/main/java/com/forgeide/core/toolchain/NativeTools.java").read_text()
+        protocol = int(re.search(r"PROTOCOL = (\d+);", source).group(1))
+        manifest = ET.parse(ROOT / "native-runtime/src/main/AndroidManifest.xml").getroot()
+        ns = "{http://schemas.android.com/apk/res/android}"
+        metadata = {e.get(ns + "name"): e.get(ns + "value") for e in manifest.findall("application/meta-data")}
+        self.assertGreaterEqual(protocol, 2)
+        self.assertEqual(str(protocol), metadata["forge.native.protocol"])
+        service = manifest.find("application/service")
+        self.assertEqual("com.forgeide.app.permission.NATIVE_RUNTIME", service.get(ns + "permission"))
+        self.assertEqual("true", service.get(ns + "exported"))
+        self.assertEqual("false", manifest.find("application").get(ns + "allowBackup"))
 
     def test_source_inventory_matches_every_locked_binary_and_recipe_revision(self):
         binary_bytes = (ROOT / "tools/native/runtime-lock.json").read_bytes()
