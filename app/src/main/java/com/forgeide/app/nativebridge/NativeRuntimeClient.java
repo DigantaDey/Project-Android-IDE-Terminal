@@ -138,10 +138,11 @@ public final class NativeRuntimeClient {
         if (input.length > 8192) throw new IllegalArgumentException("Native input exceeds 8 KiB");
         byte[] copy = input.clone();
         control.execute(() -> {
-            if (!run.done.get() && run.service != null) try {
+            if (!run.done.get() && !run.cancelled.get() && run.service != null) try {
                 run.service.write(run.id, copy);
             } catch (RemoteException | RuntimeException error) {
-                finish(run, 1, error);
+                if (run.cancelled.get()) finish(run, 130, null);
+                else finish(run, 1, error);
             }
         });
     }
@@ -162,10 +163,11 @@ public final class NativeRuntimeClient {
 
     public void resize(Run run, int rows, int columns) {
         control.execute(() -> {
-            if (!run.done.get() && run.ready.get() && run.service != null) try {
+            if (!run.done.get() && !run.cancelled.get() && run.ready.get() && run.service != null) try {
                 run.service.resize(run.id, rows, columns);
             } catch (RemoteException | RuntimeException error) {
-                finish(run, 1, error);
+                if (run.cancelled.get()) finish(run, 130, null);
+                else finish(run, 1, error);
             }
         });
     }

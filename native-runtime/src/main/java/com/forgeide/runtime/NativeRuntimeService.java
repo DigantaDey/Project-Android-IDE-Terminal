@@ -18,7 +18,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class NativeRuntimeService extends Service {
 
     private static final String HOST = "com.forgeide.app";
-    private final ExecutorService prepare = Executors.newSingleThreadExecutor();
+    // Process-wide, not Service-instance-wide: Android can replace an unbound
+    // Service while its cancelled task is still deleting the previous copy.
+    // Never let an old cleanup run alongside a new session's preparation.
+    private static final ExecutorService PREPARE = Executors.newSingleThreadExecutor(r ->
+        new Thread(r, "native-run-preparation")
+    );
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile Session active;
     private NativePayload payload;
@@ -138,7 +143,7 @@ public final class NativeRuntimeService extends Service {
                 active = null;
                 throw new IllegalStateException("IDE callback has died", dead);
             }
-            prepare.execute(() -> launch(s, snapshot, new Bundle(options)));
+            PREPARE.execute(() -> launch(s, snapshot, new Bundle(options)));
         }
 
         @Override
@@ -311,8 +316,11 @@ public final class NativeRuntimeService extends Service {
             long timeout = interactive
                 ? 30L * 60 * 1000
                 : Math.max(100, Math.min(60000, options.getLong("timeout", 10000)));
-            s.deadline = () -> stopSession(s, 124, "Native session deadline reached");
-            main.postDelayed(s.deadline, timeout);
+            synchronized (this) {
+                check(s);
+                s.deadline = () -> stopSession(s, 124, "Native session deadline reached");
+                main.postDelayed(s.deadline, timeout);
+            }
             Thread output = new Thread(() -> readOutput(s), "native-pty-output");
             output.start();
             String initial = options.getString("stdin", "");
@@ -352,7 +360,9 @@ public final class NativeRuntimeService extends Service {
                 }
                 s.callback.onOutput(Arrays.copyOf(buffer, n));
             }
-        } catch (IOException ignored) {} catch (RemoteException dead) {
+        } catch (IOException | IllegalStateException closed) {
+            // Cancellation can close the master before this thread duplicates it.
+        } catch (RemoteException dead) {
             stopSession(s, 130, "IDE disconnected");
         }
     }
@@ -394,7 +404,8 @@ public final class NativeRuntimeService extends Service {
         Session s = active;
         if (s != null) stopSession(s, 130, "Runtime service stopped");
         main.removeCallbacksAndMessages(null);
-        prepare.shutdownNow();
+        // PREPARE belongs to the process. Cancelling this Session prevents exec;
+        // its cleanup must finish before a replacement Service prepares a copy.
         super.onDestroy();
     }
 }

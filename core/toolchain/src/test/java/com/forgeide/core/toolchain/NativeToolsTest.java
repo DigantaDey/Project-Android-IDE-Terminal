@@ -33,6 +33,7 @@ public class NativeToolsTest {
         );
         assertEquals("/runtime/usr/bin/bash", plan.get(0));
         assertFalse(plan.get(4).contains(file));
+        assertTrue(plan.get(4).contains("-fno-color-diagnostics"));
         assertTrue(plan.contains("/copy/" + file));
         assertEquals(List.of("a;rm", "বাংলা 🐍"), plan.subList(plan.size() - 2, plan.size()));
         assertTrue(plan.contains("/runtime/usr/bin/clang++"));

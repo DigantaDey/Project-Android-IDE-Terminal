@@ -69,8 +69,8 @@ public final class NativeToolchain implements Toolchain {
     ) {
         policy.requireSupported(restrictions());
         Utf8Chunks decoder = new Utf8Chunks();
-        java.util.concurrent.atomic.AtomicReference<String> project =
-            new java.util.concurrent.atomic.AtomicReference<>("");
+        java.util.concurrent.atomic.AtomicReference<LiteralStreamRewriter> project =
+            new java.util.concurrent.atomic.AtomicReference<>();
         NativeRuntimeClient.Run run = app.nativeRuntime.start(
             app.workspace,
             tool,
@@ -82,13 +82,18 @@ public final class NativeToolchain implements Toolchain {
             cancel,
             bytes -> {
                 String output = decoder.append(bytes);
-                String root = project.get();
-                stdout.accept(root.isEmpty() ? output : output.replace(root + "/", ""));
+                LiteralStreamRewriter paths = project.get();
+                stdout.accept(paths == null ? output : paths.append(output));
             },
-            info -> project.set(info.getString("project", ""))
+            info -> {
+                String root = info.getString("project", "");
+                if (!root.isEmpty()) project.set(new LiteralStreamRewriter(root + "/", ""));
+            }
         );
         return run.result.whenComplete((exit, failure) -> {
             String tail = decoder.finish();
+            LiteralStreamRewriter paths = project.get();
+            if (paths != null) tail = paths.append(tail) + paths.finish();
             if (!tail.isEmpty()) stdout.accept(tail);
         });
     }
