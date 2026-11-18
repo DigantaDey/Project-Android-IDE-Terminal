@@ -125,6 +125,24 @@ public final class WorkspaceDeviceTest {
                 assertNotNull(a.findViewById(MainActivity.RUN_ID));
                 assertNotNull(a.findViewById(MainActivity.SAVE_ID));
                 View palette = a.findViewById(MainActivity.PALETTE_ID);
+                android.view.ViewGroup content = a.findViewById(android.R.id.content);
+                int background = ((android.graphics.drawable.ColorDrawable) content
+                        .getChildAt(0)
+                        .getBackground()).getColor();
+                androidx.core.view.WindowInsetsControllerCompat bars =
+                    new androidx.core.view.WindowInsetsControllerCompat(
+                        a.getWindow(),
+                        a.getWindow().getDecorView()
+                    );
+                assertEquals(
+                    "Status icons must contrast with the native theme",
+                    android.graphics.Color.luminance(background) > 0.4,
+                    bars.isAppearanceLightStatusBars()
+                );
+                if (android.os.Build.VERSION.SDK_INT >= 27) assertEquals(
+                    android.graphics.Color.luminance(background) > 0.4,
+                    bars.isAppearanceLightNavigationBars()
+                );
                 assertEquals("Command palette", palette.getContentDescription());
                 assertTrue(palette.performClick());
             });
@@ -298,7 +316,144 @@ public final class WorkspaceDeviceTest {
     }
 
     @Test
+    public void delayedFormattingCannotOverwriteADifferentTab() throws Exception {
+        AtomicReference<ForgeApplication> state = new AtomicReference<>();
+        AtomicReference<ForgeApplication.OpenDocument> original = new AtomicReference<>();
+        activity
+            .getScenario()
+            .onActivity(a -> {
+                ForgeApplication app = (ForgeApplication) a.getApplication();
+                state.set(app);
+                CodeEditor editor = a.findViewById(MainActivity.EDITOR_ID);
+                original.set(
+                    app.documents
+                        .stream()
+                        .filter(doc -> doc.content == editor.getText())
+                        .findFirst()
+                        .get()
+                );
+            });
+        ForgeApplication app = state.get();
+        String path = "format-race-" + java.util.UUID.randomUUID() + ".js";
+        String fixture = "const fixture = 'never replace the newly selected tab';\n";
+        String before = original.get().content.toString();
+        ForgeApplication.OpenDocument other = app.io
+            .submit(() -> {
+                app.workspace.write(path, fixture);
+                return app.open(path);
+            })
+            .get(20, TimeUnit.SECONDS);
+        CountDownLatch occupied = new CountDownLatch(1),
+            release = new CountDownLatch(1);
+        Future<?> blocker = app.io.submit(() -> {
+            occupied.countDown();
+            if (!release.await(20, TimeUnit.SECONDS)) throw new IOException("Test storage gate timed out");
+            return null;
+        });
+        try {
+            assertTrue(occupied.await(10, TimeUnit.SECONDS));
+            activity
+                .getScenario()
+                .onActivity(a -> {
+                    long time = android.os.SystemClock.uptimeMillis();
+                    assertTrue(
+                        a.dispatchKeyEvent(
+                            new android.view.KeyEvent(
+                                time,
+                                time,
+                                android.view.KeyEvent.ACTION_DOWN,
+                                android.view.KeyEvent.KEYCODE_L,
+                                0,
+                                android.view.KeyEvent.META_CTRL_ON | android.view.KeyEvent.META_ALT_ON
+                            )
+                        )
+                    );
+                    CodeEditor editor = a.findViewById(MainActivity.EDITOR_ID);
+                    for (int i = 0; i < app.documents.size() && editor.getText() != other.content; i++) {
+                        a.dispatchKeyEvent(
+                            new android.view.KeyEvent(
+                                time,
+                                time,
+                                android.view.KeyEvent.ACTION_DOWN,
+                                android.view.KeyEvent.KEYCODE_TAB,
+                                0,
+                                android.view.KeyEvent.META_CTRL_ON
+                            )
+                        );
+                    }
+                    assertSame(
+                        "A real native tab switch must happen while the formatting task is queued",
+                        other.content,
+                        editor.getText()
+                    );
+                });
+            release.countDown();
+            blocker.get(20, TimeUnit.SECONDS);
+            app.io.submit(() -> {}).get(20, TimeUnit.SECONDS);
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            activity
+                .getScenario()
+                .onActivity(a -> {
+                    CodeEditor editor = a.findViewById(MainActivity.EDITOR_ID);
+                    assertSame(other.content, editor.getText());
+                    assertEquals(fixture, editor.getText().toString());
+                    assertEquals(before, original.get().content.toString());
+                });
+        } finally {
+            release.countDown();
+            blocker.get(20, TimeUnit.SECONDS);
+            activity
+                .getScenario()
+                .onActivity(a -> {
+                    long time = android.os.SystemClock.uptimeMillis();
+                    CodeEditor editor = a.findViewById(MainActivity.EDITOR_ID);
+                    for (
+                        int i = 0;
+                        i < app.documents.size() && editor.getText() != original.get().content;
+                        i++
+                    ) {
+                        a.dispatchKeyEvent(
+                            new android.view.KeyEvent(
+                                time,
+                                time,
+                                android.view.KeyEvent.ACTION_DOWN,
+                                android.view.KeyEvent.KEYCODE_TAB,
+                                0,
+                                android.view.KeyEvent.META_CTRL_ON
+                            )
+                        );
+                    }
+                    other.detach();
+                    app.documents.remove(other);
+                    app.activePath = original.get().path;
+                });
+            app.io
+                .submit(() -> {
+                    app.recovery.discard(other.project, path);
+                    app.workspace.delete(path);
+                    app.persistSession();
+                    return null;
+                })
+                .get(20, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     public void captureNativeWorkspaceScreenshot() throws Exception {
+        // Idle input is not a rendered frame. Wait for two actual frames, including system bars.
+        CountDownLatch rendered = new CountDownLatch(1);
+        activity
+            .getScenario()
+            .onActivity(a ->
+                a
+                    .getWindow()
+                    .getDecorView()
+                    .postOnAnimation(() -> a.getWindow().getDecorView().postOnAnimation(rendered::countDown))
+            );
+        assertTrue(
+            "The native workspace must draw before visual capture",
+            rendered.await(10, TimeUnit.SECONDS)
+        );
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         Bitmap bitmap = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         assertNotNull(bitmap);
