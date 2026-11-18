@@ -64,6 +64,52 @@ public final class GitAndVaultDeviceTest {
     }
 
     @Test
+    public void repositoryCannotDisableTlsChecksOrReenableRedirects() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Workspace workspace = new Workspace(
+            new File(context.getCacheDir(), "git-tls-" + UUID.randomUUID()).toPath()
+        );
+        try (SafeGit git = new SafeGit(workspace, new CredentialVault(context))) {
+            git.init();
+        }
+        String config =
+            workspace.read(".git/config") +
+            "\n[http]\n sslVerify = false\n followRedirects = true\n[http \"https://github.com\"]\n sslVerify = false\n followRedirects = true\n";
+        workspace.write(".git/config", config);
+        try (SafeGit git = new SafeGit(workspace, new CredentialVault(context))) {
+            git.status();
+            git.origin("https://github.com/example/fixture.git");
+        }
+        String stored = workspace.read(".git/config").toLowerCase(Locale.ROOT);
+        assertFalse(stored.contains("sslverify = false"));
+        assertFalse(stored.contains("followredirects = true"));
+        assertTrue(stored.contains("sslverify = true"));
+    }
+
+    @Test
+    public void repositoryCookieFilesCannotReadAppPrivateState() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        Workspace workspace = new Workspace(
+            new File(context.getCacheDir(), "git-cookie-" + UUID.randomUUID()).toPath()
+        );
+        try (SafeGit git = new SafeGit(workspace, new CredentialVault(context))) {
+            git.init();
+        }
+        workspace.write(
+            ".git/config",
+            workspace.read(".git/config") + "\n[http]\n cookieFile = /data/private/forbidden\n"
+        );
+        try (SafeGit git = new SafeGit(workspace, new CredentialVault(context))) {
+            try {
+                git.status();
+                fail();
+            } catch (IOException expected) {
+                assertTrue(expected.getMessage().contains("unsupported external"));
+            }
+        }
+    }
+
+    @Test
     public void tokenVaultEncryptsAndDeletesDeviceBoundSecret() throws Exception {
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         CredentialVault vault = new CredentialVault(context);

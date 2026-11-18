@@ -29,7 +29,8 @@ The interpreter deadline, service main-thread watchdog, and host deadline are in
 - SQL query display: at most 1,000 rows and bounded cell text.
 - Project editor: strict UTF-8, no NUL/binary content, at most 8 MiB per editable file; analysis disabled above 512 KiB.
 - Archives: at most 256 MiB extracted, 20,000 entries, depth 64, normalized unique paths, and a new empty destination.
-- Regex: bounded character access and time checks, including cancellation/interruption, instead of an unbounded pathological backtracking scan.
+- Regex: bounded character access, time checks, enumeration/capture limits, and cancellation/interruption, instead of unbounded backtracking or match-metadata allocation. Replace-all is single-pass, validates expansion size before allocation, and applies no partial edit on invalid templates/oversized output.
+- Git diff: 1 MiB text/binary threshold and a 256 KiB output buffer; repository metadata cannot disable TLS/redirect policy or use external credential/cookie/certificate files.
 
 **Hard process memory ceilings, CPU-share quotas, and a general native syscall/container policy are not implemented.** Android may kill the isolated process under pressure, but a malicious allocation can still affect device responsiveness before termination. The strict hard-limit setting refuses execution rather than falsely promising a quota. Network/process/filesystem access cannot be enabled for the built-in providers merely by editing run JSON.
 
@@ -39,7 +40,7 @@ GitHub tokens are entered only in an in-app password-style dialog. Account verif
 
 Credentials are never injected into execution IPC, terminal environments, project files, Git remote URLs, recovery journals, or ZIP backups. Obvious credential assignments are excluded from terminal history and redacted in echoed commands. This is not general-purpose secret scanning: do not type secrets into source/terminals, or store them in a project yourself.
 
-GitHub API requests disable redirects and do not echo response bodies/tokens in errors. Git remotes must be HTTPS, without userinfo/query/fragment or nonstandard ports. GitHub credentials are supplied only when the actual challenged destination is GitHub HTTPS. JGit redirects are disabled. Other HTTPS hosts do not receive the vault token.
+GitHub API requests disable redirects and do not echo response bodies/tokens in errors. Git remotes must be HTTPS, without userinfo/query/fragment or nonstandard ports. GitHub credentials are supplied only when the actual challenged destination is GitHub HTTPS. JGit redirects are disabled for global and URL-specific HTTP configuration. Repository settings cannot turn off TLS verification. External cookie files, custom certificate/key files, and extra HTTP headers are rejected rather than granting repository metadata access to trusted app state. Other HTTPS hosts do not receive the vault token.
 
 All network operations are user-initiated. No analytics, ads, automatic runtime/package installation, or background cloud synchronization is implemented.
 

@@ -30,7 +30,7 @@ Instrumentation exercises:
 
 - Real native editor input, undo/redo, disk save, shared split views and terminal retention across Activity recreation, command controls, and out-of-project recovery.
 - Runtime identity, real kernel socket denial and private-file probes, real JavaScript/SQLite, interpreter/native-work deadlines, immediate cancel followed by rerun, old-token cancellation ownership, denied SQL attach/extensions, and unsupported strict-policy refusal.
-- Real local JGit commits/diffs/history/branches, an executable hook witness that must not run, explicit process denial, and encrypted Keystore token round trips/deletion using fake fixture credentials.
+- Real local JGit commits/diffs/history/branches, repository TLS/redirect hardening and forbidden external cookie files, an executable hook witness that must not run, explicit process denial, and encrypted Keystore token round trips/deletion using fake fixture credentials.
 - Real static HTML rendering with scripts disabled and confined resource/URL handling.
 - A screenshot of the actual native workspace, written to the test app's external files directory and pulled into CI artifacts. It is not a design mock.
 
@@ -38,7 +38,7 @@ No real GitHub token or external network dependency is used by device tests. Net
 
 ## Core regressions
 
-The Java library suites cover the edit/undo model and 4,000 randomized edits; malformed-Unicode token tiling; indentation/pairs/folds; bounded catastrophic regex and zero-width/contextual replacements; JSON validity/formatting lexemes; SQL splitting; path/symlink confinement, invalid UTF-8, checked-save conflicts and ZIP traversal/limits; recoverable trash and restore conflicts; project-search snapshots; cancellation races; UTF-8 output limits; recovery checksums; terminal confinement/history; URL/conflict policy; actual JS execution/deadline/cancellation/debug watches; command registry; run configs/build-log parsing; and real in-memory LSP/DAP framing/correlation/disconnect tests.
+The Java library suites cover the edit/undo model and 4,000 randomized edits; malformed-Unicode token tiling; indentation/pairs/folds; bounded catastrophic regex, zero-width/contextual replacements, Java replacement-template compatibility, large single-pass replacement, stale matches and oversized expansions; JSON validity/formatting lexemes; SQL splitting; path/symlink confinement, invalid UTF-8, checked-save conflicts and ZIP traversal/limits; recoverable trash and restore conflicts; project-search snapshots; cancellation races; UTF-8 output limits; recovery checksums; terminal confinement/history; URL/conflict policy; actual JS execution/deadline/cancellation/debug watches; command registry; run configs/build-log parsing; and real in-memory LSP/DAP framing/correlation/disconnect tests.
 
 An optional offline ECJ/JUnit harness exists at `scripts/test-local.sh` for restricted environments. It needs ECJ, JUnit, Hamcrest, and Rhino jars in `.local/tools` and a working Java runtime (`JAVA=…`). Those jars are not vendored. The standard reproducible path is Gradle; the optional harness does not compile the Android app or replace Android lint/device tests.
 
