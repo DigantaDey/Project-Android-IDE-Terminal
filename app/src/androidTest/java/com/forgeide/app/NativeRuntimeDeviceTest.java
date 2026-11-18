@@ -134,7 +134,7 @@ public final class NativeRuntimeDeviceTest {
     @Test
     public void pythonUsesRealStdinUnicodeArgvAndSeparateUidWithKernelDenials() throws Exception {
         Path witness = app.stateDir.resolve("native-private-witness.txt");
-        Files.writeString(witness, "IDE-private");
+        AtomicFiles.write(witness, "IDE-private");
         assertTrue(Files.isReadable(witness));
         workspace.write(
             "native-🐍.py",
@@ -347,5 +347,39 @@ public final class NativeRuntimeDeviceTest {
             });
         }
         retained.get().run.result.get(10, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void cancelledNativePreparationAndOldStopCannotOwnTheNextRun() throws Exception {
+        workspace.write("ok.py", "print('NEW_OWNER_42',flush=True)\n");
+        NativeRuntimeClient.Run old = start(
+            "python",
+            "python",
+            "ok.py",
+            List.of(),
+            Map.of(),
+            "",
+            60000,
+            4096,
+            false,
+            null
+        );
+        app.nativeRuntime.stop(old);
+        assertEquals(Integer.valueOf(130), old.result.get(10, TimeUnit.SECONDS));
+        NativeRuntimeClient.Run next = start(
+            "python",
+            "python",
+            "ok.py",
+            List.of(),
+            Map.of(),
+            "",
+            60000,
+            4096,
+            false,
+            null
+        );
+        app.nativeRuntime.stop(old);
+        assertEquals(output.toString(), Integer.valueOf(0), next.result.get(100, TimeUnit.SECONDS));
+        assertTrue(output.toString(), output.toString().contains("NEW_OWNER_42"));
     }
 }

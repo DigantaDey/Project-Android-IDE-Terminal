@@ -81,6 +81,7 @@ public final class NativeRuntimeClient {
         public final String id = UUID.randomUUID().toString();
         public final CompletableFuture<Integer> result = new CompletableFuture<>();
         private final AtomicBoolean done = new AtomicBoolean();
+        private final AtomicBoolean cancelled = new AtomicBoolean();
         private final AtomicLong bytes = new AtomicLong();
         private final AtomicBoolean ready = new AtomicBoolean();
         private ServiceConnection connection;
@@ -119,11 +120,15 @@ public final class NativeRuntimeClient {
     }
 
     public void stop(Run run) {
+        run.cancelled.set(true);
         CompletableFuture.runAsync(() -> {
-            try {
-                if (run.service != null) run.service.stop(run.id);
-            } catch (RemoteException | RuntimeException ignored) {} finally {
-                finish(run, 130, null);
+            // Serializes cancellation with the tiny start RPC, never with blocking PTY input.
+            synchronized (run) {
+                try {
+                    if (run.service != null) run.service.stop(run.id);
+                } catch (RemoteException | RuntimeException ignored) {} finally {
+                    finish(run, 130, null);
+                }
             }
         });
     }
@@ -226,7 +231,7 @@ public final class NativeRuntimeClient {
                 run.service = INativeRuntime.Stub.asInterface(binder);
                 control.execute(() -> {
                     try {
-                        if (run.done.get() || !available(tool)) {
+                        if (run.done.get() || run.cancelled.get() || !available(tool)) {
                             finish(run, 130, null);
                             return;
                         }
@@ -258,58 +263,68 @@ public final class NativeRuntimeClient {
                                 ParcelFileDescriptor.MODE_READ_ONLY
                             )
                         ) {
-                            run.service.start(
-                                run.id,
-                                snapshot,
-                                options,
-                                new INativeCallback.Stub() {
-                                    private void caller() {
-                                        if (
-                                            Binder.getCallingUid() != run.expectedUid
-                                        ) throw new SecurityException("Unexpected native callback identity");
-                                    }
-
-                                    @Override
-                                    public void onReady(Bundle info) {
-                                        caller();
-                                        if (run.done.get() || !run.ready.compareAndSet(false, true)) return;
-                                        main.post(() -> {
-                                            if (run.deadline != null) main.removeCallbacks(run.deadline);
-                                            run.deadline = () -> stop(run);
-                                            main.postDelayed(
-                                                run.deadline,
-                                                (interactive ? 30L * 60 * 1000 : timeout) + 2500
-                                            );
-                                        });
-                                        ready.accept(new Bundle(info));
-                                    }
-
-                                    @Override
-                                    public void onOutput(byte[] bytes) {
-                                        caller();
-                                        if (run.done.get() || bytes == null || bytes.length == 0) return;
-                                        if (
-                                            bytes.length > 8192 ||
-                                            run.bytes.addAndGet(bytes.length) > outputLimit
-                                        ) {
-                                            stop(run);
-                                            return;
-                                        }
-                                        output.accept(bytes.clone());
-                                    }
-
-                                    @Override
-                                    public void onExit(int status, String message) {
-                                        caller();
-                                        if (!message.isEmpty() && !run.done.get()) output.accept(
-                                            ("\r\n[" +
-                                                message.substring(0, Math.min(2000, message.length())) +
-                                                "]\r\n").getBytes(StandardCharsets.UTF_8)
-                                        );
-                                        finish(run, status, null);
-                                    }
+                            synchronized (run) {
+                                if (run.done.get() || run.cancelled.get()) {
+                                    finish(run, 130, null);
+                                    return;
                                 }
-                            );
+                                run.service.start(
+                                    run.id,
+                                    snapshot,
+                                    options,
+                                    new INativeCallback.Stub() {
+                                        private void caller() {
+                                            if (
+                                                Binder.getCallingUid() != run.expectedUid
+                                            ) throw new SecurityException(
+                                                "Unexpected native callback identity"
+                                            );
+                                        }
+
+                                        @Override
+                                        public void onReady(Bundle info) {
+                                            caller();
+                                            if (
+                                                run.done.get() || !run.ready.compareAndSet(false, true)
+                                            ) return;
+                                            main.post(() -> {
+                                                if (run.deadline != null) main.removeCallbacks(run.deadline);
+                                                run.deadline = () -> stop(run);
+                                                main.postDelayed(
+                                                    run.deadline,
+                                                    (interactive ? 30L * 60 * 1000 : timeout) + 2500
+                                                );
+                                            });
+                                            ready.accept(new Bundle(info));
+                                        }
+
+                                        @Override
+                                        public void onOutput(byte[] bytes) {
+                                            caller();
+                                            if (run.done.get() || bytes == null || bytes.length == 0) return;
+                                            if (
+                                                bytes.length > 8192 ||
+                                                run.bytes.addAndGet(bytes.length) > outputLimit
+                                            ) {
+                                                stop(run);
+                                                return;
+                                            }
+                                            output.accept(bytes.clone());
+                                        }
+
+                                        @Override
+                                        public void onExit(int status, String message) {
+                                            caller();
+                                            if (!message.isEmpty() && !run.done.get()) output.accept(
+                                                ("\r\n[" +
+                                                    message.substring(0, Math.min(2000, message.length())) +
+                                                    "]\r\n").getBytes(StandardCharsets.UTF_8)
+                                            );
+                                            finish(run, status, null);
+                                        }
+                                    }
+                                );
+                            }
                         }
                     } catch (Exception error) {
                         finish(run, 1, error);
@@ -346,7 +361,7 @@ public final class NativeRuntimeClient {
                     return;
                 }
                 main.post(() -> {
-                    if (run.done.get() || !available(tool)) {
+                    if (run.done.get() || run.cancelled.get() || !available(tool)) {
                         finish(run, 130, null);
                         return;
                     }

@@ -92,4 +92,20 @@ public class RuntimeSnapshotTest {
             fail();
         } catch (IOException expected) {}
     }
+
+    @Test
+    public void truncatedArchiveCannotBeExecutedAsAPartialProject() throws Exception {
+        Workspace project = new Workspace(tmp.newFolder().toPath());
+        project.write("main.py", "print(42)");
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        RuntimeSnapshot.write(project, bytes);
+        byte[] complete = bytes.toByteArray();
+        try {
+            RuntimeSnapshot.read(
+                tmp.newFolder().toPath(),
+                new ByteArrayInputStream(java.util.Arrays.copyOf(complete, complete.length - 22))
+            );
+            fail();
+        } catch (IOException expected) {}
+    }
 }
