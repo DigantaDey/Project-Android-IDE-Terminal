@@ -75,7 +75,7 @@ public final class ExecutionClient {
         if (bytes.length > 512 * 1024) throw new IllegalArgumentException("Execution source is limited to 512 KiB");
         Bundle b = new Bundle();
         b.putLong("timeout", policy.timeoutMillis); b.putInt("output", policy.outputBytes);
-        b.putString("file", config.file); b.putString("stdin", config.stdin);
+        b.putString("language", config.toolchain); b.putString("file", config.file); b.putString("stdin", config.stdin);
         b.putStringArray("arguments", config.arguments.toArray(new String[0])); b.putBoolean("debug", debug);
         Bundle env = new Bundle(); config.environment.forEach(env::putString); b.putBundle("environment", env);
         List<Breakpoints.Point> selected = new ArrayList<>();

@@ -30,6 +30,10 @@ public final class ExecutionService extends Service {
                     while((n=stream.read(buf))!=-1){if(bytes.size()+n>512*1024)throw new IOException("Source exceeds 512 KiB");bytes.write(buf,0,n);}
                     callback.onEvent(Json.write(Map.of("event","sandboxReady","uid",android.os.Process.myUid(),"isolated",android.os.Process.myUid()!=getApplicationInfo().uid,"hostFilesReadable",getFilesDir().canRead(),"networkPermission",checkSelfPermission(android.Manifest.permission.INTERNET)==android.content.pm.PackageManager.PERMISSION_GRANTED)));
                     String code=bytes.toString(StandardCharsets.UTF_8.name());
+                    if(config.getString("language","javascript").equals("sql")){
+                        int exit=SqlRuntime.run(code,output,text->{try{callback.onOutput(text);}catch(RemoteException e){throw new IllegalStateException(e);}},error->{try{callback.onOutput(config.getString("file","main.sql")+":1:1: error: "+error+"\n");}catch(RemoteException e){throw new IllegalStateException(e);}});
+                        callback.onFinished(exit,"",0,0);return;
+                    }
                     Map<String,String> env=new LinkedHashMap<>();Bundle values=config.getBundle("environment");if(values!=null)for(String key:values.keySet()){if(env.size()>=100)break;env.put(key,values.getString(key,""));}
                     if(config.getBoolean("debug")){
                         Map<Integer,String> points=new HashMap<>();int[] lines=config.getIntArray("breakpoints");String[] conditions=config.getStringArray("conditions");

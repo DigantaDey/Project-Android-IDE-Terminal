@@ -25,6 +25,10 @@ public final class ForgeApplication extends Application {
     public final Settings settings=new Settings();
     public final Breakpoints breakpoints=new Breakpoints();
     public final BuildLog buildHistory=new BuildLog();
+    public final ToolchainRegistry toolchains=new ToolchainRegistry();
+    public volatile CompletableFuture<Integer> activeRun;
+    public volatile CancellationToken runCancel;
+    public boolean isRunning(){return activeRun!=null&&!activeRun.isDone();}
     public final List<OpenDocument> documents=new CopyOnWriteArrayList<>();
     public final List<Runnable> observers=new CopyOnWriteArrayList<>();
     public final List<String> logs=new CopyOnWriteArrayList<>();
@@ -34,6 +38,8 @@ public final class ForgeApplication extends Application {
         // Android also instantiates this Application in the isolated runtime: never open host state there.
         if(android.os.Process.myUid()!=getApplicationInfo().uid)return;
         execution=new ExecutionClient(this);
+        toolchains.register(new com.forgeide.app.execution.IsolatedToolchain("javascript",execution));
+        toolchains.register(new com.forgeide.app.execution.IsolatedToolchain("sql",execution));
         try{
             projects=getFilesDir().toPath().resolve("projects");stateDir=getFilesDir().toPath().resolve("state");Files.createDirectories(projects);Files.createDirectories(stateDir);
             recovery=new RecoveryStore(getFilesDir().toPath().resolve("recovery"));
