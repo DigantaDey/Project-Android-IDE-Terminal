@@ -34,6 +34,8 @@ jobs:
         run: |
           npm ci --prefix tools/format --ignore-scripts --no-audit --no-fund
           npm --prefix tools/format run check
+      - name: Test CI report helpers
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
       - name: Compile, test and lint
         run: |
           set -o pipefail

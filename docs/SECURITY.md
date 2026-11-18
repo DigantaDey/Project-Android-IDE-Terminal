@@ -11,7 +11,7 @@ Projects, source programs, Git metadata/remotes, archives, regular expressions, 
 1. **Trusted app UID:** private projects, editor state, settings, recovery, Git/network requests, Android Keystore. Its only manifest permission is INTERNET; there is no broad storage, root, camera, microphone, contacts, location, or all-files permission.
 2. **Project command authority:** the virtual shell uses a confined `Workspace`. It does not receive the app's state/recovery/vault directories and never invokes a host shell. It is trusted IDE functionality operating on explicit project data—not an unrestricted native shell.
 3. **Untrusted execution UID:** the non-exported `ExecutionService` has `isolatedProcess=true`. Android gives it a separate ephemeral UID without the app's inherited permissions or app-private storage. Only bounded source bytes and explicit launch data are passed to it. It verifies Binder callers against the app UID.
-4. **Static WebView renderer:** no JavaScript, native bridge, file/content access, external network, geolocation, or database storage. Confined resources are intercepted under a synthetic HTTPS origin with a restrictive CSP. A renderer failure closes the preview rather than weakening settings.
+4. **Static WebView renderer:** no JavaScript, native bridge, file/content access, external network, geolocation, or database storage. Confined resources are intercepted under a synthetic HTTPS origin with a restrictive CSP. A missing/broken provider or renderer failure shows a native unavailable state rather than crashing the editor, weakening settings, downloading a browser, or opening an external URL.
 
 ## Execution restrictions
 
