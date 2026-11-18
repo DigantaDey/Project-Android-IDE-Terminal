@@ -1,5 +1,7 @@
+import java.security.MessageDigest
+
 plugins { id("com.android.application") }
-val nativeBundleId = java.security.MessageDigest.getInstance("SHA-256").digest(rootProject.file("tools/native/runtime-lock.json").readBytes()).joinToString("") { "%02x".format(it) }
+val nativeBundleId = MessageDigest.getInstance("SHA-256").digest(rootProject.file("tools/native/runtime-lock.json").readBytes()).joinToString("") { "%02x".format(it) }
 android {
     namespace = "com.forgeide.app"
     compileSdk = 35
