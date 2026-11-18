@@ -10,11 +10,13 @@ import com.forgeide.app.nativebridge.*;
 import com.forgeide.core.project.Workspace;
 import com.forgeide.core.toolchain.*;
 import com.forgeide.core.util.*;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.ZipFile;
 import org.junit.*;
 import org.junit.runner.RunWith;
 
@@ -172,6 +174,146 @@ public final class NativeRuntimeDeviceTest {
             assertNotEquals(android.os.Process.myUid(), identity.get().getInt("uid"));
         } finally {
             Files.deleteIfExists(witness);
+        }
+    }
+
+    private static String readBounded(InputStream input) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        byte[] block = new byte[4096];
+        int count;
+        while ((count = input.read(block)) != -1) {
+            if (bytes.size() + count > 65536) throw new IOException("Fixture response exceeds 64 KiB");
+            bytes.write(block, 0, count);
+        }
+        return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    @Test
+    public void untrustedShellCannotAcquireTheCompanionsSignaturePermission() throws Exception {
+        String response;
+        try (
+            InputStream input = new android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                InstrumentationRegistry.getInstrumentation()
+                    .getUiAutomation()
+                    .executeShellCommand(
+                        // API 26 UiAutomation captures stdout only. The single no-space -c
+                        // argument redirects stderr too, without Runtime.exec quote parsing.
+                        "/system/bin/sh -c (am${IFS}startservice${IFS}-n${IFS}com.forgex/com.forgeide.runtime.NativeRuntimeService)2>&1"
+                    )
+            )
+        ) {
+            response = readBounded(input);
+        }
+        assertTrue(response, response.contains("com.forgeide.app.permission.NATIVE_RUNTIME"));
+        assertTrue(
+            response,
+            response.contains("Permission Denial") || response.contains("SecurityException")
+        );
+        assertFalse(app.nativeRuntime.busy());
+    }
+
+    @Test
+    public void nativeNetworkNeedsOptInAndBinderTransactionsStayDenied() throws Exception {
+        workspace.write(
+            "kernel-guards.py",
+            String.join(
+                "\n",
+                "import socket,os,fcntl,errno",
+                "try:",
+                " socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)",
+                " raise AssertionError('UNIX proxy bypass')",
+                "except PermissionError:",
+                " print('UNIX_PROXY_DENIED')",
+                "with open('/dev/null','rb') as fd:",
+                " try:",
+                "  fcntl.ioctl(fd,0xc0306201,bytes(48))",
+                "  raise AssertionError('Binder bypass')",
+                " except PermissionError:",
+                "  print('BINDER_DENIED')",
+                ""
+            )
+        );
+        assertRun("python", "python", "kernel-guards.py");
+        assertTrue(output.toString(), output.toString().contains("UNIX_PROXY_DENIED"));
+        assertTrue(output.toString(), output.toString().contains("BINDER_DENIED"));
+        app.settings.set("native.network", true, false);
+        workspace.write(
+            "network-on.py",
+            String.join(
+                "\n",
+                "import socket,fcntl",
+                "with socket.socket() as server, socket.socket() as client:",
+                " server.bind(('127.0.0.1',0))",
+                " server.listen(1)",
+                " client.connect(server.getsockname())",
+                " peer,_=server.accept()",
+                " with peer:",
+                "  client.sendall(b'42')",
+                "  print('NETWORK_OPT_IN_'+peer.recv(2).decode())",
+                "with socket.socket(socket.AF_UNIX): pass",
+                "with open('/dev/null','rb') as fd:",
+                " try:",
+                "  fcntl.ioctl(fd,0xc0306201,bytes(48))",
+                "  raise AssertionError('Binder bypass after network opt-in')",
+                " except PermissionError:",
+                "  print('BINDER_STILL_DENIED')",
+                ""
+            )
+        );
+        assertRun("python", "python", "network-on.py");
+        assertTrue(output.toString(), output.toString().contains("NETWORK_OPT_IN_42"));
+        assertTrue(output.toString(), output.toString().contains("BINDER_STILL_DENIED"));
+    }
+
+    @Test
+    public void nativeWritesRequireExplicitBoundedExportAndPrivateMetadataStaysOut() throws Exception {
+        workspace.write("original.txt", "IDE original");
+        workspace.write(".git/config", "fixture private Git metadata");
+        workspace.write(".forge/settings.json", "{\"native.network\":true}");
+        workspace.write(
+            "export.py",
+            "from pathlib import Path\nimport time\nassert not Path('.git').exists()\nassert not Path('.forge').exists()\nPath('native-generated.txt').write_text('NATIVE_GENERATED_42')\nprint('EXPORT_READY_42',flush=True)\nwhile True: time.sleep(1)\n"
+        );
+        CountDownLatch ready = new CountDownLatch(1);
+        NativeRuntimeClient.Run run = start(
+            "python",
+            "python",
+            "export.py",
+            List.of(),
+            Map.of(),
+            "",
+            60000,
+            4096,
+            false,
+            bytes -> {
+                if (output.toString().contains("EXPORT_READY_42")) ready.countDown();
+            }
+        );
+        assertTrue(output.toString(), ready.await(30, TimeUnit.SECONDS));
+        assertFalse(Files.exists(workspace.resolve("native-generated.txt")));
+        assertFalse(app.settings.bool("native.network"));
+        Path destination = Files.createTempFile(app.projects, "native-export-fixture-", ".zip");
+        try {
+            android.net.Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                app,
+                app.getPackageName() + ".files",
+                destination.toFile()
+            );
+            app.nativeRuntime.exportProject(run, uri).get(15, TimeUnit.SECONDS);
+            try (ZipFile zip = new ZipFile(destination.toFile())) {
+                assertNull(zip.getEntry(".git/config"));
+                assertNull(zip.getEntry(".forge/settings.json"));
+                assertNotNull(zip.getEntry("native-generated.txt"));
+                try (InputStream input = zip.getInputStream(zip.getEntry("native-generated.txt"))) {
+                    assertEquals("NATIVE_GENERATED_42", readBounded(input));
+                }
+                try (InputStream input = zip.getInputStream(zip.getEntry("original.txt"))) {
+                    assertEquals("IDE original", readBounded(input));
+                }
+            }
+            assertEquals("IDE original", workspace.read("original.txt"));
+        } finally {
+            Files.deleteIfExists(destination);
         }
     }
 
