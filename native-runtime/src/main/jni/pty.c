@@ -54,47 +54,7 @@ static char **array_copy(JNIEnv *env, jobjectArray array) {
 }
 static void free_array(char **array) { if (array) { for (int i = 0; array[i]; i++) free(array[i]); free(array); } }
 
-#if defined(__aarch64__)
-#define FORGE_ARCH AUDIT_ARCH_AARCH64
-#elif defined(__x86_64__)
-#define FORGE_ARCH AUDIT_ARCH_X86_64
-#else
-#error Unsupported native runtime ABI
-#endif
-#define ARCH_GUARD \
-    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)), \
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, FORGE_ARCH, 1, 0), \
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL), \
-    BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)), \
-    BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x40000000, 0, 1), \
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM)
-
-static int restrict_child(int network) {
-    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) return -1;
-    struct sock_filter network_filter[] = {
-        ARCH_GUARD,
-        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 0, 3),
-        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0])),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AF_UNIX, 1, 0),
-        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EACCES),
-        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW)
-    };
-    struct sock_fprog network_program = { .len = sizeof(network_filter) / sizeof(network_filter[0]), .filter = network_filter };
-    if (!network && prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &network_program)) return -1;
-    /* Prevent a child from inspecting/injecting its trusted companion parent. */
-    struct sock_filter process_filter[] = {
-        ARCH_GUARD,
-        BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_ptrace, 3, 0),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_process_vm_readv, 2, 0),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_process_vm_writev, 1, 0),
-        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
-        BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM)
-    };
-    struct sock_fprog process_program = { .len = sizeof(process_filter) / sizeof(process_filter[0]), .filter = process_filter };
-    return prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &process_program);
-}
+#include "child_policy.h"
 
 JNIEXPORT jlongArray JNICALL Java_com_forgeide_runtime_NativePty_start(JNIEnv *env, jclass type, jstring directory, jobjectArray arguments, jobjectArray environment, jint rows, jint columns, jboolean network) {
     (void)type;
@@ -107,14 +67,28 @@ JNIEXPORT jlongArray JNICALL Java_com_forgeide_runtime_NativePty_start(JNIEnv *e
         if (master >= 0) close(master);
         free(cwd); free_array(argv); free_array(envp); fail(env, "Could not open Android PTY"); return NULL;
     }
+    /* Keep a slave open across fork: reading an unpaired master returns EIO and
+       would permanently end the output pump before a cold child can even exec. */
+    int slave = open(slave_name, O_RDWR | O_NOCTTY | O_CLOEXEC);
+    if (slave < 0) {
+        close(master); free(cwd); free_array(argv); free_array(envp);
+        fail(env, "Could not open Android PTY slave"); return NULL;
+    }
     struct winsize size = { .ws_row = (unsigned short)rows, .ws_col = (unsigned short)columns };
     ioctl(master, TIOCSWINSZ, &size);
     pid_t pid = fork();
     if (pid == 0) {
         close(master);
-        if (setsid() < 0) _exit(126);
-        int slave = open(slave_name, O_RDWR);
-        if (slave < 0 || ioctl(slave, TIOCSCTTY, 0) < 0) _exit(126);
+        /* The VM's blocked/ignored signals must not disable shell job control. */
+        sigset_t empty;
+        sigemptyset(&empty);
+        sigprocmask(SIG_SETMASK, &empty, NULL);
+        struct sigaction action = { .sa_handler = SIG_DFL };
+        sigemptyset(&action.sa_mask);
+        for (int signal = 1; signal < NSIG; signal++) {
+            if (signal != SIGKILL && signal != SIGSTOP) sigaction(signal, &action, NULL);
+        }
+        if (setsid() < 0 || ioctl(slave, TIOCSCTTY, 0) < 0) _exit(126);
         if (dup2(slave, 0) < 0 || dup2(slave, 1) < 0 || dup2(slave, 2) < 0 || chdir(cwd)) _exit(126);
         /* No Binder, APK, snapshot, callback, or parent file descriptors survive exec. */
         DIR *fds = opendir("/proc/self/fd");
@@ -129,9 +103,13 @@ JNIEXPORT jlongArray JNICALL Java_com_forgeide_runtime_NativePty_start(JNIEnv *e
             write(2, message, sizeof(message) - 1); _exit(126);
         }
         execve(argv[0], argv, envp);
+        int exec_error = errno;
+        const char *cause = exec_error == EACCES ? "EACCES\r\n" : exec_error == ENOENT ? "ENOENT\r\n" : exec_error == ENOEXEC ? "ENOEXEC\r\n" : "other exec error\r\n";
+        write(2, cause, strlen(cause));
         static const char message[] = "Forge: native exec failed; check ABI, Android compatibility and bundle integrity\r\n";
         write(2, message, sizeof(message) - 1); _exit(126);
     }
+    close(slave);
     free(cwd); free_array(argv); free_array(envp);
     if (pid < 0) { close(master); fail(env, "Could not fork native runtime"); return NULL; }
     jlong values[2] = { pid, master };

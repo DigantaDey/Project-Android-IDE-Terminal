@@ -99,8 +99,23 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/cache/restore@v4
+        id: native-source-cache
+        with:
+          path: |
+            build/native-sources/upstream
+            build/native-sources/termux-build-recipes-and-patches.zip
+          key: native-sources-v1-${{ hashFiles('tools/native/sources-lock.json') }}
+          restore-keys: native-sources-v1-
       - name: Publish pinned copyleft sources, patches and integration source
         run: python3 scripts/native-sources.py
+      - uses: actions/cache/save@v4
+        if: always() && steps.native-source-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            build/native-sources/upstream
+            build/native-sources/termux-build-recipes-and-patches.zip
+          key: native-sources-v1-${{ hashFiles('tools/native/sources-lock.json') }}
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: forge-native-corresponding-sources

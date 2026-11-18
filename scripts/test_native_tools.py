@@ -76,6 +76,38 @@ class NativeToolsTests(unittest.TestCase):
             self.assertEqual(data, destination.read_bytes())
             self.assertFalse(destination.with_suffix(".gz.partial").exists())
 
+    def test_source_mirrors_cannot_weaken_the_pinned_digest(self):
+        data = b"verified source fixture"
+        digest = hashlib.sha256(data).hexdigest()
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "source.tar.gz"
+            with mock.patch.object(sources.urllib.request, "urlopen", side_effect=[io.BytesIO(b"proxy HTML error"), io.BytesIO(data)]) as download:
+                sources.verified_download("https://example.invalid/source", digest, destination, ["https://mirror.invalid/source"])
+            self.assertEqual(data, destination.read_bytes())
+            self.assertEqual(["https://example.invalid/source", "https://mirror.invalid/source"], [c.args[0].full_url for c in download.call_args_list])
+            destination.unlink()
+            with mock.patch.object(sources.urllib.request, "urlopen", side_effect=[io.BytesIO(b"wrong 1"), io.BytesIO(b"wrong 2")]):
+                with self.assertRaisesRegex(ValueError, "expected " + digest):
+                    sources.verified_download("https://example.invalid/source", digest, destination, ["https://mirror.invalid/source"])
+            self.assertFalse(destination.exists())
+            self.assertFalse(destination.with_suffix(".gz.partial").exists())
+
+    def test_source_build_reports_every_failure_without_publishing_partial_inventory(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            index = root / "index.json"
+            index.write_text(json.dumps({"schema": 1, "packageLockSha256": hashlib.sha256((ROOT / "tools/native/runtime-lock.json").read_bytes()).hexdigest(), "recipes": {"url": "https://example.invalid/recipes", "sha256": "a" * 64}, "inputs": [{"filename": n, "url": "https://example.invalid/" + n, "sha256": "b" * 64} for n in ("first", "second")]}))
+            def download(url, sha, destination, mirrors=()):
+                if "recipes" not in url:
+                    raise ValueError("fixture unavailable " + url)
+            with mock.patch.object(sources, "verified_download", side_effect=download) as fetch, mock.patch.object(sources.subprocess, "run") as archive:
+                with self.assertRaisesRegex(ValueError, r"(?s)first:.*second:"):
+                    sources.build(index, root / "output")
+            self.assertEqual(3, fetch.call_count)
+            archive.assert_not_called()
+            self.assertFalse((root / "output/source-lock.json").exists())
+            self.assertFalse((root / "output/SHA256SUMS").exists())
+
     def test_sources_cannot_use_unpinned_file_urls(self):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(ValueError):

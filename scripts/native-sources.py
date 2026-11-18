@@ -4,9 +4,11 @@
 Runs at build time only. Keeps large corresponding-source files in ignored build/.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import traceback
@@ -15,29 +17,38 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def verified_download(url, sha256, destination):
+def verified_download(url, sha256, destination, mirrors=()):
+    urls = [url, *mirrors]
+    if not re.fullmatch(r"[a-f0-9]{64}", sha256) or any(not u.startswith("https://") for u in urls):
+        raise ValueError("Unpinned source URL")
     if destination.exists() and hashlib.sha256(destination.read_bytes()).hexdigest() == sha256:
         return
-    if not url.startswith("https://") or len(sha256) != 64:
-        raise ValueError("Unpinned source URL")
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".partial")
-    try:
-        request = urllib.request.Request(url, headers={"User-Agent": "curl/8.5.0"})
-        with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as output:
-            digest = hashlib.sha256()
-            size = 0
-            while block := response.read(65536):
-                size += len(block)
-                if size > 512 * 1024 * 1024:
-                    raise ValueError("Source archive too large")
-                digest.update(block)
-                output.write(block)
-        if digest.hexdigest() != sha256:
-            raise ValueError("Source checksum mismatch: " + url)
-        temporary.replace(destination)
-    finally:
-        temporary.unlink(missing_ok=True)
+    errors = []
+    for candidate in urls:
+        try:
+            request = urllib.request.Request(candidate, headers={"User-Agent": "curl/8.5.0"})
+            with urllib.request.urlopen(request, timeout=120) as response, temporary.open("wb") as output:
+                if not getattr(response, "geturl", lambda: candidate)().startswith("https://"):
+                    raise ValueError("Source redirected to insecure transport")
+                digest = hashlib.sha256()
+                size = 0
+                while block := response.read(65536):
+                    size += len(block)
+                    if size > 512 * 1024 * 1024:
+                        raise ValueError("Source archive too large")
+                    digest.update(block)
+                    output.write(block)
+            if digest.hexdigest() != sha256:
+                raise ValueError("Source checksum mismatch: expected " + sha256 + ", received " + digest.hexdigest() + " (" + str(size) + " bytes)")
+            temporary.replace(destination)
+            return
+        except Exception as error:
+            errors.append(candidate + ": " + str(error))
+        finally:
+            temporary.unlink(missing_ok=True)
+    raise ValueError("No pinned source mirror verified: " + "; ".join(errors))
 
 
 def build(index_path, output):
@@ -47,14 +58,23 @@ def build(index_path, output):
     output.mkdir(parents=True, exist_ok=True)
     recipe = index["recipes"]
     verified_download(recipe["url"], recipe["sha256"], output / "termux-build-recipes-and-patches.zip")
-    for record in index["inputs"]:
-        name = record["filename"]
-        if "/" in name or "\\" in name or name.startswith("."):
-            raise ValueError("Invalid source filename")
+    names = [r["filename"] for r in index["inputs"]]
+    if len(names) != len(set(names)) or any("/" in n or "\\" in n or n.startswith(".") for n in names):
+        raise ValueError("Invalid or duplicate source filename")
+
+    def obtain(record):
         try:
-            verified_download(record["url"], record["sha256"], output / "upstream" / name)
+            verified_download(record["url"], record["sha256"], output / "upstream" / record["filename"], record.get("mirrors", ()))
         except Exception as error:
-            raise ValueError("Could not obtain corresponding source " + name + " from " + record["url"] + ": " + str(error)) from error
+            return record["filename"] + ": " + str(error)
+        return None
+
+    # Collect every failure in one run. Never publish a partial source inventory,
+    # skip an unavailable input, or accept a mirror with a different digest.
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        errors = [error for error in executor.map(obtain, index["inputs"]) if error]
+    if errors:
+        raise ValueError("Missing/corrupt corresponding sources (" + str(len(errors)) + "):\n" + "\n".join(errors))
     shutil.copyfile(index_path, output / "source-lock.json")
     shutil.copyfile(ROOT / "tools/native/runtime-lock.json", output / "native-package-lock.json")
     subprocess.run(["git", "archive", "--format=tar.gz", "--output=" + str((output / "forge-integration-source.tar.gz").resolve()), "HEAD"], cwd=ROOT, check=True)
@@ -82,6 +102,6 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        detail = traceback.format_exc()[-3500:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+        detail = traceback.format_exc()[-10000:].replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
         print("::error title=Native corresponding sources::" + detail, flush=True)
         raise
