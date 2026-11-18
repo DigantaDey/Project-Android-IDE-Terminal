@@ -1,0 +1,16 @@
+{
+  "name": "forge-bundled-semantic-servers",
+  "private": true,
+  "version": "0.3.0-preview.1",
+  "description": "Pinned offline Android-compatible JavaScript LSP servers; installed only at build time with scripts disabled.",
+  "dependencies": {
+    "pyright": "1.1.414",
+    "typescript": "6.0.2",
+    "typescript-language-server": "6.1.0",
+    "vscode-langservers-extracted": "4.10.0",
+    "bash-language-server": "5.8.1"
+  },
+  "overrides": {
+    "typescript": "$typescript"
+  }
+}

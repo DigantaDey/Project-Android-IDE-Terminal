@@ -62,6 +62,19 @@ public final class NativeRuntimeClient {
         );
     }
 
+    public boolean availableServer(String id) {
+        return (
+            app.settings.bool(LanguageServers.key(id)) &&
+            !app.settings.bool("requireHardLimits") &&
+            installationProblem().isEmpty()
+        );
+    }
+
+    public boolean hasUserSession() {
+        Run run = active;
+        return run != null && run.server.isEmpty();
+    }
+
     public boolean busy() {
         return active != null;
     }
@@ -80,6 +93,18 @@ public final class NativeRuntimeClient {
     public static final class Run {
 
         public final String id = UUID.randomUUID().toString();
+        public final String server;
+        public volatile String message = "";
+        private volatile Bundle streams;
+
+        private Run(String server) {
+            this.server = server;
+        }
+
+        public boolean isCancelled() {
+            return cancelled.get();
+        }
+
         public final CompletableFuture<Integer> result = new CompletableFuture<>();
         private final AtomicBoolean done = new AtomicBoolean();
         private final AtomicBoolean cancelled = new AtomicBoolean();
@@ -95,6 +120,7 @@ public final class NativeRuntimeClient {
 
     private void finish(Run run, int exit, Throwable failure) {
         if (!run.done.compareAndSet(false, true)) return;
+        closeStdio(run.streams);
         main.post(() -> {
             if (run.deadline != null) main.removeCallbacks(run.deadline);
             if (run.bound) {
@@ -113,6 +139,16 @@ public final class NativeRuntimeClient {
             else run.result.completeExceptionally(failure);
             app.changed();
         });
+    }
+
+    private static void closeStdio(Bundle info) {
+        if (info == null) return;
+        for (String key : List.of("stdin", "stdout", "stderr")) {
+            ParcelFileDescriptor descriptor = info.getParcelable(key);
+            if (descriptor != null) try {
+                descriptor.close();
+            } catch (IOException ignored) {}
+        }
     }
 
     public void stopAll() {
@@ -172,7 +208,40 @@ public final class NativeRuntimeClient {
         });
     }
 
-    public synchronized Run start(
+    public Run startServer(
+        Workspace workspace,
+        String server,
+        CancellationToken cancel,
+        Consumer<Bundle> ready
+    ) {
+        LanguageServers.key(server);
+        return startInternal(
+            workspace,
+            "",
+            "",
+            new RunConfiguration(
+                "Bundled semantic server",
+                "",
+                "",
+                "",
+                List.of(),
+                Map.of(),
+                "",
+                List.of(),
+                List.of(),
+                List.of()
+            ),
+            30L * 60 * 1000,
+            1024 * 1024,
+            false,
+            cancel,
+            bytes -> {},
+            ready,
+            server
+        );
+    }
+
+    public Run start(
         Workspace workspace,
         String tool,
         String language,
@@ -184,8 +253,51 @@ public final class NativeRuntimeClient {
         Consumer<byte[]> output,
         Consumer<Bundle> ready
     ) {
-        if (active != null) throw new IllegalStateException("Stop the native run or close its PTY first");
-        if (!available(tool)) throw new IllegalStateException(description(tool));
+        return startInternal(
+            workspace,
+            tool,
+            language,
+            config,
+            timeout,
+            outputLimit,
+            interactive,
+            cancel,
+            output,
+            ready,
+            ""
+        );
+    }
+
+    private synchronized Run startInternal(
+        Workspace workspace,
+        String tool,
+        String language,
+        RunConfiguration config,
+        long timeout,
+        int outputLimit,
+        boolean interactive,
+        CancellationToken cancel,
+        Consumer<byte[]> output,
+        Consumer<Bundle> ready,
+        String server
+    ) {
+        boolean semantic = !server.isEmpty();
+        java.util.function.BooleanSupplier allowed = () ->
+            semantic ? availableServer(server) : available(tool);
+        if (!allowed.getAsBoolean()) throw new IllegalStateException(
+            semantic
+                ? "Language server is off, hard limits required, or matching companion is missing"
+                : description(tool)
+        );
+        CompletableFuture<?> preceding = CompletableFuture.completedFuture(null);
+        if (active != null) {
+            if (semantic || active.server.isEmpty()) throw new IllegalStateException(
+                "Stop the native run or close its PTY first"
+            );
+            Run previous = active;
+            preceding = previous.result;
+            stop(previous); // A user run/terminal takes priority over background intelligence.
+        }
         if (
             !config.buildCommand.isEmpty() || !config.runCommand.isEmpty() || !config.debugCommand.isEmpty()
         ) throw new IllegalArgumentException(
@@ -193,10 +305,17 @@ public final class NativeRuntimeClient {
         );
         NativeTools.environment(config.environment);
         NativeTools.arguments(config.arguments);
-        NativeTools.relativePath(config.file, interactive || tool.equals("npm"));
+        NativeTools.relativePath(config.file, semantic || interactive || tool.equals("npm"));
         NativeTools.relativePath(config.workingDirectory, true);
         Bundle options = new Bundle();
         options.putString("tool", tool);
+        options.putString("server", server);
+        options.putStringArray(
+            "enabledServers",
+            LanguageServers.ORDER.stream()
+                .filter(id -> app.settings.bool(LanguageServers.key(id)))
+                .toArray(String[]::new)
+        );
         options.putString("language", language);
         options.putString("file", config.file);
         options.putString("cwd", config.workingDirectory);
@@ -205,7 +324,7 @@ public final class NativeRuntimeClient {
         options.putLong("timeout", timeout);
         options.putInt("output", outputLimit);
         options.putBoolean("interactive", interactive);
-        options.putBoolean("network", app.settings.bool("native.network"));
+        options.putBoolean("network", !semantic && app.settings.bool("native.network"));
         options.putBoolean("installScripts", app.settings.bool("native.installScripts"));
         options.putStringArray(
             "enabled",
@@ -225,7 +344,7 @@ public final class NativeRuntimeClient {
         } finally {
             parcel.recycle();
         }
-        Run run = new Run();
+        Run run = new Run(server);
         active = run;
         run.connection = new ServiceConnection() {
             @Override
@@ -234,7 +353,7 @@ public final class NativeRuntimeClient {
                 run.service = INativeRuntime.Stub.asInterface(binder);
                 control.execute(() -> {
                     try {
-                        if (run.done.get() || run.cancelled.get() || !available(tool)) {
+                        if (run.done.get() || run.cancelled.get() || !allowed.getAsBoolean()) {
                             finish(run, 130, null);
                             return;
                         }
@@ -288,14 +407,26 @@ public final class NativeRuntimeClient {
                                         public void onReady(Bundle info) {
                                             caller();
                                             if (
-                                                run.done.get() || !run.ready.compareAndSet(false, true)
-                                            ) return;
+                                                run.done.get() ||
+                                                run.cancelled.get() ||
+                                                !run.ready.compareAndSet(false, true)
+                                            ) {
+                                                closeStdio(info);
+                                                return;
+                                            }
+                                            if (semantic) run.streams = info;
+                                            if (run.done.get()) {
+                                                closeStdio(info);
+                                                return;
+                                            }
                                             main.post(() -> {
+                                                if (run.done.get() || run.cancelled.get()) return;
                                                 if (run.deadline != null) main.removeCallbacks(run.deadline);
                                                 run.deadline = () -> stop(run);
                                                 main.postDelayed(
                                                     run.deadline,
-                                                    (interactive ? 30L * 60 * 1000 : timeout) + 2500
+                                                    (semantic || interactive ? 30L * 60 * 1000 : timeout) +
+                                                        2500
                                                 );
                                             });
                                             ready.accept(new Bundle(info));
@@ -318,7 +449,10 @@ public final class NativeRuntimeClient {
                                         @Override
                                         public void onExit(int status, String message) {
                                             caller();
-                                            if (!message.isEmpty() && !run.done.get()) output.accept(
+                                            run.message = message;
+                                            if (
+                                                !semantic && !message.isEmpty() && !run.done.get()
+                                            ) output.accept(
                                                 ("\r\n[" +
                                                     message.substring(0, Math.min(2000, message.length())) +
                                                     "]\r\n").getBytes(StandardCharsets.UTF_8)
@@ -351,40 +485,50 @@ public final class NativeRuntimeClient {
             }
         };
         cancel.onCancel(() -> stop(run));
-        app.io.execute(() -> {
-            try {
-                if (run.done.get()) return;
-                Path snapshot = Files.createTempFile(app.getCacheDir().toPath(), "native-project-", ".zip");
-                run.snapshot = snapshot;
-                try (OutputStream stream = Files.newOutputStream(snapshot)) {
-                    RuntimeSnapshot.write(workspace, stream);
-                }
-                if (run.done.get()) {
-                    Files.deleteIfExists(snapshot);
-                    return;
-                }
-                main.post(() -> {
-                    if (run.done.get() || run.cancelled.get() || !available(tool)) {
-                        finish(run, 130, null);
+        preceding.whenComplete((ignored, previousFailure) ->
+            app.io.execute(() -> {
+                try {
+                    if (run.done.get()) return;
+                    Path snapshot = Files.createTempFile(
+                        app.getCacheDir().toPath(),
+                        "native-project-",
+                        ".zip"
+                    );
+                    run.snapshot = snapshot;
+                    try (OutputStream stream = Files.newOutputStream(snapshot)) {
+                        RuntimeSnapshot.write(workspace, stream);
+                    }
+                    if (run.done.get()) {
+                        Files.deleteIfExists(snapshot);
                         return;
                     }
-                    try {
-                        run.bound = app.bindService(
-                            new Intent().setComponent(
-                                new ComponentName(NativeTools.PACKAGE, NativeTools.SERVICE)
-                            ),
-                            run.connection,
-                            Context.BIND_AUTO_CREATE
-                        );
-                        if (!run.bound) finish(run, 1, new IOException("Could not bind native companion"));
-                    } catch (RuntimeException error) {
-                        finish(run, 1, error);
-                    }
-                });
-            } catch (Exception error) {
-                finish(run, 1, error);
-            }
-        });
+                    main.post(() -> {
+                        if (run.done.get() || run.cancelled.get() || !allowed.getAsBoolean()) {
+                            finish(run, 130, null);
+                            return;
+                        }
+                        try {
+                            run.bound = app.bindService(
+                                new Intent().setComponent(
+                                    new ComponentName(NativeTools.PACKAGE, NativeTools.SERVICE)
+                                ),
+                                run.connection,
+                                Context.BIND_AUTO_CREATE
+                            );
+                            if (!run.bound) finish(
+                                run,
+                                1,
+                                new IOException("Could not bind native companion")
+                            );
+                        } catch (RuntimeException error) {
+                            finish(run, 1, error);
+                        }
+                    });
+                } catch (Exception error) {
+                    finish(run, 1, error);
+                }
+            })
+        );
         run.deadline = () -> stop(run);
         main.postDelayed(run.deadline, 120000);
         return run;

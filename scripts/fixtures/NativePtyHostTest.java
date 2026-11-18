@@ -11,7 +11,33 @@ public final class NativePtyHostTest {
 
     public static void main(String[] args) throws Exception {
         for (int i = 0; i < 10; i++) exercisePty();
+        for (int i = 0; i < 5; i++) exerciseStdio();
+        System.out.println("5 raw stdio launches preserved binary input, CRLF, Unicode, EOF and separate stderr");
         System.out.println("10 real PTY cold starts, resize, pipes, foreground Ctrl-C and subsequent commands passed");
+    }
+
+    private static FileDescriptor descriptor(long fd) throws Exception {
+        FileDescriptor descriptor = new FileDescriptor();
+        Field field = FileDescriptor.class.getDeclaredField("fd");
+        field.setAccessible(true);
+        field.set(descriptor, (int) fd);
+        return descriptor;
+    }
+
+    private static void exerciseStdio() throws Exception {
+        long[] process = NativePty.startStdio("/", new String[] { "/bin/bash", "--noprofile", "--norc", "-c", "test ! -t 0 && test ! -t 1 || exit 2; printf 'ERROR_ONLY\n' >&2; exec cat" }, new String[] { "PATH=/usr/bin:/bin", "HOME=/tmp" });
+        byte[] expected = "Content-Length: 51\r\n\r\n{\"text\":\"বাংলা 🐍\"}\n\0\r\n".getBytes(StandardCharsets.UTF_8);
+        try (FileOutputStream input = new FileOutputStream(descriptor(process[1])); FileInputStream output = new FileInputStream(descriptor(process[2])); FileInputStream error = new FileInputStream(descriptor(process[3]))) {
+            input.write(expected);
+            input.close(); // EOF is real, not terminal Ctrl-D or an echo/newline transformation.
+            byte[] actual = output.readAllBytes();
+            String stderr = new String(error.readAllBytes(), StandardCharsets.UTF_8);
+            if (!java.util.Arrays.equals(expected, actual)) throw new AssertionError("Raw stdio corrupted Content-Length traffic");
+            if (!stderr.equals("ERROR_ONLY\n")) throw new AssertionError("stderr leaked into protocol stdout: " + stderr);
+            if (NativePty.waitFor((int) process[0]) != 0) throw new AssertionError("Raw stdio child failed");
+        } finally {
+            ProcessHandle.of(process[0]).ifPresent(ProcessHandle::destroyForcibly);
+        }
     }
 
     private static void exercisePty() throws Exception {

@@ -56,6 +56,38 @@ static void free_array(char **array) { if (array) { for (int i = 0; array[i]; i+
 
 #include "child_policy.h"
 
+static void child_exec(char *cwd, char **argv, char **envp, int network) {
+    /* The VM's blocked/ignored signals must not disable shell job control. */
+    sigset_t empty;
+    sigemptyset(&empty);
+    sigprocmask(SIG_SETMASK, &empty, NULL);
+    struct sigaction action = { .sa_handler = SIG_DFL };
+    sigemptyset(&action.sa_mask);
+    for (int signal = 1; signal < NSIG; signal++) {
+        if (signal != SIGKILL && signal != SIGSTOP) sigaction(signal, &action, NULL);
+    }
+    if (chdir(cwd)) _exit(126);
+    /* No Binder, APK, snapshot, callback, or parent file descriptors survive exec. */
+    DIR *fds = opendir("/proc/self/fd");
+    if (!fds) _exit(126);
+    int keep = dirfd(fds);
+    struct dirent *entry;
+    while ((entry = readdir(fds))) { char *end; long fd = strtol(entry->d_name, &end, 10); if (!*end && fd > 2 && fd != keep) close((int)fd); }
+    closedir(fds);
+    struct rlimit no_core = {0, 0}, files = {256, 256}, processes = {64, 64}, file_size = {64 * 1024 * 1024, 64 * 1024 * 1024};
+    if (setrlimit(RLIMIT_CORE, &no_core) || setrlimit(RLIMIT_NOFILE, &files) || setrlimit(RLIMIT_NPROC, &processes) || setrlimit(RLIMIT_FSIZE, &file_size) || restrict_child(network)) {
+        static const char message[] = "Forge: native restrictions could not be applied; refusing execution\r\n";
+        write(2, message, sizeof(message) - 1); _exit(126);
+    }
+    execve(argv[0], argv, envp);
+    int exec_error = errno;
+    const char *cause = exec_error == EACCES ? "EACCES\r\n" : exec_error == ENOENT ? "ENOENT\r\n" : exec_error == ENOEXEC ? "ENOEXEC\r\n" : "other exec error\r\n";
+    write(2, cause, strlen(cause));
+    static const char message[] = "Forge: native exec failed; check ABI, Android compatibility and bundle integrity\r\n";
+    write(2, message, sizeof(message) - 1); _exit(126);
+
+}
+
 JNIEXPORT jlongArray JNICALL Java_com_forgeide_runtime_NativePty_start(JNIEnv *env, jclass type, jstring directory, jobjectArray arguments, jobjectArray environment, jint rows, jint columns, jboolean network) {
     (void)type;
     char *cwd = string_copy(env, directory);
@@ -79,35 +111,8 @@ JNIEXPORT jlongArray JNICALL Java_com_forgeide_runtime_NativePty_start(JNIEnv *e
     pid_t pid = fork();
     if (pid == 0) {
         close(master);
-        /* The VM's blocked/ignored signals must not disable shell job control. */
-        sigset_t empty;
-        sigemptyset(&empty);
-        sigprocmask(SIG_SETMASK, &empty, NULL);
-        struct sigaction action = { .sa_handler = SIG_DFL };
-        sigemptyset(&action.sa_mask);
-        for (int signal = 1; signal < NSIG; signal++) {
-            if (signal != SIGKILL && signal != SIGSTOP) sigaction(signal, &action, NULL);
-        }
-        if (setsid() < 0 || ioctl(slave, TIOCSCTTY, 0) < 0) _exit(126);
-        if (dup2(slave, 0) < 0 || dup2(slave, 1) < 0 || dup2(slave, 2) < 0 || chdir(cwd)) _exit(126);
-        /* No Binder, APK, snapshot, callback, or parent file descriptors survive exec. */
-        DIR *fds = opendir("/proc/self/fd");
-        if (!fds) _exit(126);
-        int keep = dirfd(fds);
-        struct dirent *entry;
-        while ((entry = readdir(fds))) { char *end; long fd = strtol(entry->d_name, &end, 10); if (!*end && fd > 2 && fd != keep) close((int)fd); }
-        closedir(fds);
-        struct rlimit no_core = {0, 0}, files = {256, 256}, processes = {64, 64}, file_size = {64 * 1024 * 1024, 64 * 1024 * 1024};
-        if (setrlimit(RLIMIT_CORE, &no_core) || setrlimit(RLIMIT_NOFILE, &files) || setrlimit(RLIMIT_NPROC, &processes) || setrlimit(RLIMIT_FSIZE, &file_size) || restrict_child(network)) {
-            static const char message[] = "Forge: native restrictions could not be applied; refusing execution\r\n";
-            write(2, message, sizeof(message) - 1); _exit(126);
-        }
-        execve(argv[0], argv, envp);
-        int exec_error = errno;
-        const char *cause = exec_error == EACCES ? "EACCES\r\n" : exec_error == ENOENT ? "ENOENT\r\n" : exec_error == ENOEXEC ? "ENOEXEC\r\n" : "other exec error\r\n";
-        write(2, cause, strlen(cause));
-        static const char message[] = "Forge: native exec failed; check ABI, Android compatibility and bundle integrity\r\n";
-        write(2, message, sizeof(message) - 1); _exit(126);
+        if (setsid() < 0 || ioctl(slave, TIOCSCTTY, 0) < 0 || dup2(slave, 0) < 0 || dup2(slave, 1) < 0 || dup2(slave, 2) < 0) _exit(126);
+        child_exec(cwd, argv, envp, network);
     }
     close(slave);
     free(cwd); free_array(argv); free_array(envp);
@@ -115,6 +120,30 @@ JNIEXPORT jlongArray JNICALL Java_com_forgeide_runtime_NativePty_start(JNIEnv *e
     jlong values[2] = { pid, master };
     jlongArray result = (*env)->NewLongArray(env, 2);
     (*env)->SetLongArrayRegion(env, result, 0, 2, values);
+    return result;
+}
+/* LSP must not pass through a terminal: no echo, CRLF conversion or shared stderr. */
+JNIEXPORT jlongArray JNICALL Java_com_forgeide_runtime_NativePty_startStdio(JNIEnv *env, jclass type, jstring directory, jobjectArray arguments, jobjectArray environment) {
+    (void)type;
+    char *cwd = string_copy(env, directory);
+    char **argv = array_copy(env, arguments), **envp = array_copy(env, environment);
+    int input[2] = {-1, -1}, output[2] = {-1, -1}, error[2] = {-1, -1};
+    if (!cwd || !argv || !envp || !argv[0] || pipe2(input, O_CLOEXEC) || pipe2(output, O_CLOEXEC) || pipe2(error, O_CLOEXEC)) {
+        for (int i = 0; i < 2; i++) { if (input[i] >= 0) close(input[i]); if (output[i] >= 0) close(output[i]); if (error[i] >= 0) close(error[i]); }
+        free(cwd); free_array(argv); free_array(envp); fail(env, "Could not allocate language-server pipes"); return NULL;
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (setsid() < 0 || dup2(input[0], 0) < 0 || dup2(output[1], 1) < 0 || dup2(error[1], 2) < 0) _exit(126);
+        child_exec(cwd, argv, envp, 0); /* Language servers NEVER get network opt-in. */
+    }
+    close(input[0]); close(output[1]); close(error[1]);
+    free(cwd); free_array(argv); free_array(envp);
+    if (pid < 0) { close(input[1]); close(output[0]); close(error[0]); fail(env, "Could not fork language server"); return NULL; }
+    jlong values[4] = {pid, input[1], output[0], error[0]};
+    jlongArray result = (*env)->NewLongArray(env, 4);
+    if (!result) { kill(pid, SIGKILL); waitpid(pid, NULL, 0); close(input[1]); close(output[0]); close(error[0]); return NULL; }
+    (*env)->SetLongArrayRegion(env, result, 0, 4, values);
     return result;
 }
 JNIEXPORT jint JNICALL Java_com_forgeide_runtime_NativePty_waitFor(JNIEnv *env, jclass type, jint pid) {

@@ -1,6 +1,7 @@
 package com.forgeide.app;
 
 import android.os.Bundle;
+import com.forgeide.app.nativebridge.SemanticLanguageSession;
 import com.forgeide.core.editor.*;
 import com.forgeide.core.language.*;
 import com.forgeide.core.util.CancellationToken;
@@ -12,6 +13,7 @@ import io.github.rosemoe.sora.text.*;
 import io.github.rosemoe.sora.widget.SymbolPairMatch;
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme;
 import java.util.*;
+import java.util.concurrent.*;
 
 /** Connects the independently tested language module to the native Sora editor. */
 public final class IdeLanguage extends EmptyLanguage {
@@ -21,6 +23,9 @@ public final class IdeLanguage extends EmptyLanguage {
     private final boolean tabs;
     private final LocalLanguageService service = new LocalLanguageService();
     private final SimpleAnalyzeManager<Void> analyzer;
+    private final SemanticLanguageSession semantic;
+    private final ForgeApplication app;
+    private final ForgeApplication.OpenDocument document;
 
     public IdeLanguage(
         LanguageRegistry registry,
@@ -28,6 +33,21 @@ public final class IdeLanguage extends EmptyLanguage {
         int tab,
         boolean tabs
     ) {
+        this(registry, language, tab, tabs, null, null, null);
+    }
+
+    public IdeLanguage(
+        LanguageRegistry registry,
+        com.forgeide.core.language.Language language,
+        int tab,
+        boolean tabs,
+        ForgeApplication app,
+        ForgeApplication.OpenDocument document,
+        SemanticLanguageSession semantic
+    ) {
+        this.app = app;
+        this.document = document;
+        this.semantic = semantic;
         this.language = language;
         this.tab = tab;
         this.tabs = tabs;
@@ -127,6 +147,73 @@ public final class IdeLanguage extends EmptyLanguage {
         while (start > 0 && com.forgeide.core.language.Language.isWordChar(line.charAt(start - 1))) start--;
         if (pos.column - start > 128) return;
         String prefix = line.substring(start, pos.column);
+        if (
+            semantic != null &&
+            document != null &&
+            content.length() <= LspResults.MAX_TEXT &&
+            semantic.readyFor(document)
+        ) {
+            long contentVersion = content.getDocumentVersion();
+            long revision = document.revision.get();
+            String source = content.getReference().toString();
+            CompletableFuture<SemanticLanguageSession.Reply> request = semantic.request(
+                document,
+                source,
+                revision,
+                "completion",
+                pos.line,
+                pos.column
+            );
+            try {
+                SemanticLanguageSession.Reply reply = request.get(1800, TimeUnit.MILLISECONDS);
+                content.validateAccess();
+                if (
+                    content.getDocumentVersion() != contentVersion || document.revision.get() != revision
+                ) return;
+                List<LspResults.Completion> candidates = LspResults.completions(
+                    reply.message,
+                    source,
+                    pos.index,
+                    pos.index - prefix.length()
+                );
+                for (LspResults.Completion item : candidates)
+                    publisher.addItem(
+                        new CompletionItem(
+                            item.label,
+                            "Semantic · " + reply.server + (item.detail.isEmpty() ? "" : " · " + item.detail)
+                        ) {
+                            @Override
+                            public void performCompletion(
+                                io.github.rosemoe.sora.widget.CodeEditor editor,
+                                Content text,
+                                int line,
+                                int column
+                            ) {
+                                if (
+                                    !semantic.isCurrent(reply) ||
+                                    editor.getText() != document.content ||
+                                    text != document.content ||
+                                    app.workspace != document.owner ||
+                                    !app.documents.contains(document) ||
+                                    document.revision.get() != revision ||
+                                    text.getDocumentVersion() != contentVersion ||
+                                    editor.getCursor().getLeft() != pos.index
+                                ) return;
+                                text.replace(item.start, item.end, item.text);
+                                CharPosition after = text.getIndexer().getCharPosition(item.selection);
+                                editor.setSelection(after.line, after.column);
+                            }
+                        }
+                    );
+                if (!candidates.isEmpty()) return;
+            } catch (InterruptedException interrupted) {
+                request.cancel(true);
+                Thread.currentThread().interrupt();
+                return;
+            } catch (ExecutionException | TimeoutException unavailable) {
+                request.cancel(true); // Emits $/cancelRequest; never leaks per-keystroke requests.
+            }
+        }
         if (prefix.isEmpty()) return;
         Set<String> values = new TreeSet<>(language.keywords());
         // Bound characters and candidate count as well as line count. A single huge

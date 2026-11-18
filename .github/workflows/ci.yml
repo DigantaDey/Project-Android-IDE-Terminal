@@ -17,7 +17,7 @@ jobs:
   build:
     name: Core tests, Android build & lint
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -45,12 +45,14 @@ jobs:
           FORGE_NATIVE_HOST_TEST_USER: forge-native-test
         run: |
           set -o pipefail
+          python3 scripts/semantic_bundle.py build
+          python3 scripts/semantic-smoke.py
           python3 -m unittest discover -s scripts -p 'test_*.py' -v 2>&1 | tee host-tests-ci.log
       - uses: actions/cache/restore@v4
         id: native-payload-cache
         with:
           path: build/native/assets
-          key: native-payload-v1-${{ runner.os }}-${{ hashFiles('tools/native/runtime-lock.json', 'scripts/native-bundle.py') }}
+          key: native-payload-v1-${{ runner.os }}-${{ hashFiles('tools/native/runtime-lock.json', 'scripts/native-bundle.py', 'scripts/semantic_bundle.py', 'tools/native/servers/**') }}
       - name: Build pinned offline native payloads (build-time downloads only)
         if: steps.native-payload-cache.outputs.cache-hit != 'true'
         run: python3 scripts/native-bundle.py build
@@ -58,7 +60,7 @@ jobs:
         if: steps.native-payload-cache.outputs.cache-hit != 'true'
         with:
           path: build/native/assets
-          key: native-payload-v1-${{ runner.os }}-${{ hashFiles('tools/native/runtime-lock.json', 'scripts/native-bundle.py') }}
+          key: native-payload-v1-${{ runner.os }}-${{ hashFiles('tools/native/runtime-lock.json', 'scripts/native-bundle.py', 'scripts/semantic_bundle.py', 'tools/native/servers/**') }}
       - name: Compile, test and lint
         run: |
           set -o pipefail
@@ -69,6 +71,8 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk build/offline/forge-ide.apk
           cp native-runtime/build/outputs/apk/debug/native-runtime-debug.apk build/offline/forge-native-runtime.apk
           cp docs/NATIVE_RUNTIME.md build/offline/INSTALL-AND-SECURITY.md
+          cp docs/LANGUAGE_SERVERS.md build/offline/LANGUAGE_SERVERS.md
+          cp tools/native/servers/package-lock.json build/offline/language-server-package-lock.json
           cp tools/native/runtime-lock.json build/offline/native-package-lock.json
           cp build/native/assets/runtime-catalog.json build/offline/runtime-catalog.json
           (cd build/offline && sha256sum *.apk > SHA256SUMS)

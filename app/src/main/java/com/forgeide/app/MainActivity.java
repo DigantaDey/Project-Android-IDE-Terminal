@@ -12,6 +12,7 @@ import android.view.*;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import com.forgeide.app.git.*;
+import com.forgeide.app.nativebridge.SemanticLanguageSession;
 import com.forgeide.core.commands.CommandRegistry;
 import com.forgeide.core.debug.Breakpoints;
 import com.forgeide.core.editor.*;
@@ -53,6 +54,9 @@ public final class MainActivity extends Activity {
     private ForgeApplication app;
     private final LanguageRegistry languages = LanguageRegistry.builtins();
     private final LocalLanguageService localLanguage = new LocalLanguageService();
+    private SemanticLanguageSession semantic;
+    private String lastSemanticStatus = "";
+    private boolean wasNativeBusy;
     private final CommandRegistry commands = new CommandRegistry();
     private final Set<String> expanded = new HashSet<>();
     private final List<Diagnostic> problems = new ArrayList<>();
@@ -119,6 +123,12 @@ public final class MainActivity extends Activity {
         wide = getResources().getConfiguration().screenWidthDp >= 840;
         sidebarVisible = saved == null ? wide : saved.getBoolean("sidebar", wide);
         makeLayout();
+        semantic = new SemanticLanguageSession(app, found -> {
+            if (destroyed) return;
+            problems.removeIf(p -> p.source.startsWith("LSP · "));
+            problems.addAll(found);
+            applyDiagnostics();
+        });
         registerCommands();
         problems.addAll(BuildLog.diagnostics(app.output.toString()));
         app.observers.add(observer);
@@ -492,7 +502,9 @@ public final class MainActivity extends Activity {
         );
         e.setColorScheme(scheme);
         e.subscribeEvent(SelectionChangeEvent.class, (event, unsubscribe) -> {
+            boolean switched = focused != e;
             focused = e;
+            if (switched) app.main.post(diagnosticTask);
             ForgeApplication.OpenDocument doc = docFor(e);
             if (doc != null) {
                 doc.line = event.getLeft().line;
@@ -538,7 +550,10 @@ public final class MainActivity extends Activity {
                 languages,
                 languages.forFile(doc.path),
                 app.settings.integer("tabSize"),
-                app.settings.bool("useTabs")
+                app.settings.bool("useTabs"),
+                app,
+                doc,
+                semantic
             )
         );
         e.setText(doc.content, true, null);
@@ -636,6 +651,16 @@ public final class MainActivity extends Activity {
     private void refreshState() {
         if (destroyed || status == null) return;
         boolean running = app.isRunning();
+        boolean nativeBusy = app.nativeRuntime.hasUserSession();
+        if (
+            nativeBusy != wasNativeBusy || (semantic != null && !lastSemanticStatus.equals(semantic.status()))
+        ) {
+            wasNativeBusy = nativeBusy;
+            lastSemanticStatus = semantic == null ? "" : semantic.status();
+            analyzedRevision = -1;
+            app.main.removeCallbacks(diagnosticTask);
+            app.main.postDelayed(diagnosticTask, 150);
+        }
         if (wasRunning && !running) {
             problems.removeIf(problem -> problem.source.equals("compiler"));
             problems.addAll(BuildLog.diagnostics(app.output.toString()));
@@ -684,7 +709,8 @@ public final class MainActivity extends Activity {
                 "  ·  " +
                 (d == null ? "" : ("Ln " + (d.line + 1) + ", Col " + (d.column + 1) + "  ·  ")) +
                 "UTF-8  ·  " +
-                (app.settings.bool("useTabs") ? "Tabs" : "Spaces: " + app.settings.integer("tabSize"))
+                (app.settings.bool("useTabs") ? "Tabs" : "Spaces: " + app.settings.integer("tabSize")) +
+                (semantic == null ? "" : "  ·  " + semantic.status())
         );
         breadcrumb.setText(
             d == null
@@ -994,7 +1020,10 @@ public final class MainActivity extends Activity {
                             );
                             return operation.call();
                         },
-                        done
+                        value -> {
+                            done.accept(value);
+                            if (semantic != null) semantic.restart(current());
+                        }
                     );
                 })
             );
@@ -1497,7 +1526,7 @@ public final class MainActivity extends Activity {
             }
             case "Problems":
                 if (problems.isEmpty()) scrollText(
-                    "No reported problems.\nJSON validation and runtime/compiler diagnostics are available offline. Semantic diagnostics for other languages require an LSP provider."
+                    "No reported problems.\nJSON validation and runtime/compiler diagnostics are available offline. Enable a bundled language server in Settings for semantic diagnostics. Unsupported languages keep lexical tools."
                 );
                 else listPanel(
                     problems.stream().map(Diagnostic::toString).collect(java.util.stream.Collectors.toList()),
@@ -1897,6 +1926,7 @@ public final class MainActivity extends Activity {
         if (app.runCancel != null) app.runCancel.cancel();
         taskCancel.cancel();
         app.execution.cancel();
+        if (semantic != null) semantic.halt();
         app.nativeRuntime.stopAll();
         appendOutput("\n[execution / task stopped]\n", null);
         refreshStatus();
@@ -2171,6 +2201,7 @@ public final class MainActivity extends Activity {
         entries.add("Native network: " + (app.settings.bool("native.network") ? "ON" : "OFF"));
         entries.add("npm install scripts: " + (app.settings.bool("native.installScripts") ? "ON" : "OFF"));
         entries.add("Open native Bash PTY");
+        entries.add("Bundled semantic language servers");
         entries.add("Built-in tools / capability boundaries");
         choose("Toolchains & native runtimes", entries, i -> {
             if (i == 0) textDialog(
@@ -2178,7 +2209,7 @@ public final class MainActivity extends Activity {
                 (app.nativeRuntime.installationProblem().isEmpty()
                             ? "Matching runtime is installed."
                             : app.nativeRuntime.installationProblem()) +
-                    "\n\nDownload the offline bundle from this branch's successful GitHub CI run. Extract and install BOTH APKs from that same bundle using Android's package installer; allow installation only from a source you trust. No credentials or automatic downloads are needed.\n\nCompanion package: com.forgex. It deliberately targets Android's legacy execution compatibility mode. The IDE still targets API 35. Supports primary-user arm64-v8a / x86_64 devices; sideloaded development builds, not a Play-ready distribution.\n\nEnabled native tools receive an explicit disposable project copy, never IDE credentials or live storage grants. Native tools share the companion UID with each other. Turning a switch off stops the native session and blocks Forge launches; it does not remove APK bytes or prohibit a shell from implementing other languages.\n\nFile runs are ephemeral. The native PTY keeps its copy only while the session is alive: export changes before exit. One native run/PTY at a time; six existing scoped-shell sessions remain available."
+                    "\n\nDownload the matching offline APK bundle from GitHub Releases (or a successful CI run). Extract and install BOTH APKs from that same bundle using Android's package installer; allow installation only from a source you trust. No credentials or automatic downloads are needed.\n\nCompanion package: com.forgex. It deliberately targets Android's legacy execution compatibility mode. The IDE still targets API 35. Supports primary-user arm64-v8a / x86_64 devices; sideloaded development builds, not a Play-ready distribution.\n\nEnabled native tools receive an explicit disposable project copy, never IDE credentials or live storage grants. Native tools share the companion UID with each other. Turning a switch off stops the native session and blocks Forge launches; it does not remove APK bytes or prohibit a shell from implementing other languages.\n\nFile runs are ephemeral. The native PTY keeps its copy only while the session is alive: export changes before exit. One native run/PTY or semantic server family at a time; runs and the PTY preempt language servers. Six existing scoped-shell sessions remain available."
             );
             else if (i <= NativeTools.ORDER.size()) toggleNative(
                 NativeTools.key(NativeTools.ORDER.get(i - 1))
@@ -2186,6 +2217,7 @@ public final class MainActivity extends Activity {
             else if (i == 6) toggleNative("native.network");
             else if (i == 7) toggleNative("native.installScripts");
             else if (i == 8) openNativeTerminal();
+            else if (i == 9) semanticTools();
             else builtinCapabilities();
         });
     }
@@ -2193,6 +2225,7 @@ public final class MainActivity extends Activity {
     private void toggleNative(String key) {
         boolean enable = !app.settings.bool(key);
         Runnable change = () -> {
+            if (semantic != null) semantic.halt();
             app.nativeRuntime.stopAll();
             app.settings.set(key, enable, false);
             if (enable && key.equals("native.npm")) app.settings.set("native.node", true, false);
@@ -2203,18 +2236,24 @@ public final class MainActivity extends Activity {
                     app.settings.save(app.stateDir.resolve("settings.json"), false);
                     return true;
                 },
-                v -> toolchains()
+                v -> {
+                    if (semantic != null) semantic.restart(current());
+                    if (key.startsWith("native.lsp.")) semanticTools();
+                    else toolchains();
+                }
             );
         };
         if (!enable) {
             change.run();
             return;
         }
-        String warning = key.equals("native.network")
-            ? "Native programs and npm will be allowed Internet access. Dependencies run untrusted code; review the project and explicitly requested downloads. Changing this setting stops the current native session."
-            : key.equals("native.installScripts")
-                ? "npm lifecycle scripts can execute arbitrary native code inside the companion. This is separate from downloading a dependency. Leave this off unless you trust the package. Changing it stops the current native session."
-                : "Enable this bundled native tool? Native code can read/write the disposable project copy, access the companion's own files and create processes. It cannot inherit the IDE's private files, GitHub vault or SAF permissions. The runtime is a legacy-compatibility sideloaded app, not the stricter isolated interpreter. Native tools share its UID. Network remains controlled separately. Enabling npm also enables Node.js.";
+        String warning = key.startsWith("native.lsp.")
+            ? "Enable this bundled offline language server? It receives a disposable project copy and unsaved editor text in the separate companion UID, never IDE credentials or storage grants. It may parse project configuration and launch bundled helper processes. Servers never get network access, even if native networking is on. This does not enable running your programs with Node/Python/Bash. One server family is active at a time; native runs and the PTY take priority. Server-initiated edits and commands are rejected. Restart the server to refresh closed files after external changes."
+            : key.equals("native.network")
+                ? "Native programs and npm will be allowed Internet access. Dependencies run untrusted code; review the project and explicitly requested downloads. Changing this setting stops the current native session."
+                : key.equals("native.installScripts")
+                    ? "npm lifecycle scripts can execute arbitrary native code inside the companion. This is separate from downloading a dependency. Leave this off unless you trust the package. Changing it stops the current native session."
+                    : "Enable this bundled native tool? Native code can read/write the disposable project copy, access the companion's own files and create processes. It cannot inherit the IDE's private files, GitHub vault or SAF permissions. The runtime is a legacy-compatibility sideloaded app, not the stricter isolated interpreter. Native tools share its UID. Network remains controlled separately. Enabling npm also enables Node.js.";
         new AlertDialog.Builder(this)
             .setTitle("Enable native capability?")
             .setMessage(warning)
@@ -2250,13 +2289,14 @@ public final class MainActivity extends Activity {
     private void builtinCapabilities() {
         textDialog(
             "Toolchains & dependencies",
-            "BUILT INTO THE IDE\nJavaScript · isolated Rhino ES6 interpreter + debugger\nSQLite · isolated in-memory SQL\nHTML/CSS · static offline preview\nJSON · validation + layout formatting\nProject shell · scoped file commands, not Bash\nGit · pure Java, HTTPS; hooks disabled\n\nOFFLINE NATIVE COMPANION\nClang / C++ / LLD, CPython, Node.js, npm, Bash and a real PTY are in the separate runtime APK. Enable individual tools in Settings. They use a disposable project copy and a separate Android UID. Network and npm installation scripts default off.\n\nNot bundled: Java SDK, TypeScript compiler, semantic LSP/DAP servers or additional language debuggers. Native code can create processes; the interpreter's no-process policy is not claimed. Hard CPU/memory quotas remain unsupported. No on-device runtime downloads or hidden package installations."
+            "BUILT INTO THE IDE\nJavaScript · isolated Rhino ES6 interpreter + debugger\nSQLite · isolated in-memory SQL\nHTML/CSS · static offline preview\nJSON · validation + layout formatting\nProject shell · scoped file commands, not Bash\nGit · pure Java, HTTPS; hooks disabled\n\nOFFLINE NATIVE COMPANION\nClang / C++ / LLD, CPython, Node.js, npm, Bash and a real PTY are in the separate runtime APK. Enable individual tools in Settings. They use a disposable project copy and a separate Android UID. Network and npm installation scripts default off.\n\nBUNDLED SEMANTIC SERVERS\nclangd (C/C++), Pyright (Python), TypeScript Language Server + TypeScript, Bash Language Server, VS Code HTML/CSS/JSON servers. Separate default-off switches; raw stdio; always offline in the companion UID.\n\nNot bundled: Java SDK, other semantic servers, DAP servers or additional language debuggers. Native code can create processes; the interpreter's no-process policy is not claimed. Hard CPU/memory quotas remain unsupported. No on-device runtime downloads or hidden package installations."
         );
     }
 
     // ---------- Search, language intelligence and edit commands ----------
     private void analyzeCurrent() {
         ForgeApplication.OpenDocument d = current();
+        if (semantic != null) semantic.refresh(d);
         if (d == null || d.content.length() > 512 * 1024) return;
         long revision = d.revision.get();
         if (d == analyzedDocument && revision == analyzedRevision) return;
@@ -2266,7 +2306,10 @@ public final class MainActivity extends Activity {
                 List<Diagnostic> found = new ArrayList<>(
                     localLanguage.diagnose(languages.forFile(d.path), d.path, source, new CancellationToken())
                 );
-                if (languages.forFile(d.path).id().equals("javascript")) {
+                if (
+                    languages.forFile(d.path).id().equals("javascript") &&
+                    (semantic == null || !semantic.readyFor(d))
+                ) {
                     org.mozilla.javascript.Context cx = org.mozilla.javascript.Context.enter();
                     try {
                         cx.setOptimizationLevel(-1);
@@ -2293,6 +2336,9 @@ public final class MainActivity extends Activity {
                     analyzedDocument = d;
                     problems.removeIf(
                         p -> p.file.equals(d.path) && (p.source.equals("JSON") || p.source.equals("Rhino"))
+                    );
+                    if (semantic != null && semantic.readyFor(d)) found.removeIf(p ->
+                        p.source.equals("Rhino")
                     );
                     problems.addAll(found);
                     applyDiagnostics();
@@ -2371,7 +2417,195 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void semanticTools() {
+        List<String> entries = new ArrayList<>();
+        entries.add("Status / offline server boundaries");
+        for (String id : LanguageServers.ORDER)
+            entries.add(
+                (app.settings.bool(LanguageServers.key(id)) ? "✓  " : "○  ") + LanguageServers.label(id)
+            );
+        entries.add("Restart server / refresh project copy");
+        entries.add("Stop semantic session");
+        choose("Bundled semantic language servers", entries, index -> {
+            if (index == 0) textDialog(
+                "Offline semantic tools",
+                (semantic == null ? "" : semantic.status()) +
+                    "\n\n" +
+                    "clangd: C/C++; Pyright: Python; TypeScript Language Server: JavaScript/TypeScript/JSX/TSX; Bash Language Server: Bash; VS Code HTML/CSS/JSON servers. All engines, dependencies, typeshed, TypeScript libraries and WASM parsers are bundled in the matching companion. No npm/pip downloads or language-server installation is needed.\n\n" +
+                    "Enable each server separately. This does not enable executing user programs. Servers always have networking blocked at the native syscall boundary, even if the native-network switch is on. They share the companion UID and receive a disposable project copy plus unsaved open documents. No IDE credentials or SAF grants are shared.\n\n" +
+                    "One server family at a time; switching projects/languages replaces its copy. Native runs and Bash take priority. The session stops when the editor leaves the foreground or after 30 minutes. Stop pauses intelligence until Restart. Restart also refreshes closed files changed outside the editor; project file operations refresh automatically.\n\n" +
+                    "Completion, hover, definition, references, symbols, formatting and diagnostics use negotiated capabilities. Unsupported methods report honestly. Plain single-document completion edits only; only a simple final-cursor $0 marker is converted to plain text. Interactive snippets, arbitrary commands, lazy resolution and auto-import/multi-file edits are not applied. External SDK/library definitions are not opened as IDE project paths. Bash's optional ShellCheck/shfmt are not bundled; no shell linting/formatting is claimed. JSON schema downloads are disabled.\n\n" +
+                    "512 KiB text per open document; project copies remain bounded to 32 MiB / 2,000 entries. A 256 MiB V8 heap preference is not a hard process-memory quota. Strict hard-quota policy refuses these servers. Java/Kotlin/Rust/etc. semantic servers and additional debuggers are not supplied."
+            );
+            else if (index <= LanguageServers.ORDER.size()) toggleNative(
+                LanguageServers.key(LanguageServers.ORDER.get(index - 1))
+            );
+            else if (index == LanguageServers.ORDER.size() + 1) {
+                semantic.restart(current());
+                toast("Refreshing offline language server");
+            } else {
+                semantic.halt();
+                toast("Semantic session stopped");
+            }
+        });
+    }
+
+    /** True only for explicit semantic consent. Disabled languages keep clearly labelled lexical tools. */
+    private boolean useSemantic(String method, Consumer<SemanticLanguageSession.Reply> done) {
+        ForgeApplication.OpenDocument doc = current();
+        if (doc == null || semantic == null) return false;
+        String id = LanguageServers.forLanguage(SemanticLanguageSession.languageId(languages, doc.path));
+        if (id.isEmpty() || !app.settings.bool(LanguageServers.key(id))) return false;
+        if (doc.content.length() > LspResults.MAX_TEXT) {
+            toast("Semantic tools are limited to 512 KiB per document");
+            return true;
+        }
+        semantic.refresh(doc);
+        CodeEditor editor = focused;
+        long revision = doc.revision.get();
+        int line = editor.getCursor().getLeftLine(),
+            column = editor.getCursor().getLeftColumn(),
+            index = editor.getCursor().getLeft();
+        String source = doc.content.toString();
+        CompletableFuture<SemanticLanguageSession.Reply> request = semantic.request(
+            doc,
+            source,
+            revision,
+            method,
+            line,
+            column
+        );
+        taskCancel.cancel();
+        CancellationToken cancellation = new CancellationToken();
+        taskCancel = cancellation;
+        cancellation.onCancel(() -> request.cancel(true));
+        Runnable deadline = () -> request.cancel(true);
+        app.main.postDelayed(deadline, 65000);
+        busy.setText("◌");
+        status.setText("Semantic " + method + " · " + id);
+        request.whenComplete((reply, failure) ->
+            app.main.post(() -> {
+                app.main.removeCallbacks(deadline);
+                if (destroyed) return;
+                busy.setText("●");
+                refreshStatus();
+                if (failure != null) {
+                    if (request.isCancelled()) toast("Semantic request cancelled / timed out");
+                    else error(failure);
+                    return;
+                }
+                if (
+                    !semantic.isCurrent(reply) ||
+                    !ownsDocumentResult(editor, doc, revision) ||
+                    (method.equals("completion") && editor.getCursor().getLeft() != index)
+                ) {
+                    toast("Document or provider changed; semantic result discarded");
+                    return;
+                }
+                done.accept(reply);
+            })
+        );
+        return true;
+    }
+
+    private void showSemanticLocations(
+        SemanticLanguageSession.Reply reply,
+        String title,
+        List<LspResults.Location> locations
+    ) {
+        if (locations.isEmpty()) {
+            toast("No project locations. External SDK/library paths are not opened in the IDE.");
+            return;
+        }
+        Workspace owner = app.workspace;
+        choose(
+            title,
+            locations.stream().map(Object::toString).collect(java.util.stream.Collectors.toList()),
+            index -> {
+                if (app.workspace != owner || !semantic.isCurrent(reply)) {
+                    toast("Project/provider changed; navigation cancelled");
+                    return;
+                }
+                LspResults.Location location = locations.get(index);
+                goTo(location.file, location.line, location.column);
+            }
+        );
+    }
+
+    private void semanticHover() {
+        if (
+            !useSemantic("hover", reply -> {
+                String text = LspResults.hover(reply.message);
+                textDialog(
+                    "Type information · " + reply.server,
+                    text.isEmpty() ? "No hover information at this position" : text
+                );
+            })
+        ) {
+            toast("Enable this language's bundled server in Settings");
+            semanticTools();
+        }
+    }
+
+    private void semanticCompletion() {
+        ForgeApplication.OpenDocument doc = current();
+        CodeEditor editor = focused;
+        long revision = doc == null ? -1 : doc.revision.get();
+        int cursor = editor == null ? 0 : editor.getCursor().getLeft();
+        if (
+            !useSemantic("completion", reply -> {
+                int start = cursor;
+                while (
+                    start > 0 &&
+                    com.forgeide.core.language.Language.isWordChar(reply.source.charAt(start - 1))
+                ) start--;
+                List<LspResults.Completion> items = LspResults.completions(
+                    reply.message,
+                    reply.source,
+                    cursor,
+                    start
+                );
+                if (items.isEmpty()) {
+                    toast("No supported plain-text semantic completions");
+                    return;
+                }
+                choose("Semantic completions · " + reply.server, items
+                    .stream()
+                    .map(item -> item.label + (item.detail.isEmpty() ? "" : " · " + item.detail))
+                    .collect(java.util.stream.Collectors.toList()), index -> {
+                    if (
+                        !semantic.isCurrent(reply) ||
+                        !ownsDocumentResult(editor, doc, revision) ||
+                        editor.getCursor().getLeft() != cursor
+                    ) {
+                        toast("Document/cursor/provider changed; completion discarded");
+                        return;
+                    }
+                    LspResults.Completion item = items.get(index);
+                    editor.getText().replace(item.start, item.end, item.text);
+                    io.github.rosemoe.sora.text.CharPosition after = editor
+                        .getText()
+                        .getIndexer()
+                        .getCharPosition(item.selection);
+                    editor.setSelection(after.line, after.column);
+                });
+            })
+        ) {
+            toast("Enable this language's bundled server in Settings");
+            semanticTools();
+        }
+    }
+
     private void symbols() {
+        if (
+            useSemantic("documentSymbol", reply ->
+                showSemanticLocations(
+                    reply,
+                    "Document symbols · " + reply.server,
+                    LspResults.symbols(reply.message, reply.uris, current().path)
+                )
+            )
+        ) return;
         ForgeApplication.OpenDocument d = current();
         if (d == null) return;
         background(
@@ -2397,6 +2631,15 @@ public final class MainActivity extends Activity {
     }
 
     private void definition() {
+        if (
+            useSemantic("definition", reply ->
+                showSemanticLocations(
+                    reply,
+                    "Definitions · " + reply.server,
+                    LspResults.locations(reply.message, reply.uris)
+                )
+            )
+        ) return;
         ForgeApplication.OpenDocument d = current();
         if (d == null) return;
         String word = com.forgeide.core.language.Language.wordAt(
@@ -2423,6 +2666,15 @@ public final class MainActivity extends Activity {
     }
 
     private void references() {
+        if (
+            useSemantic("references", reply ->
+                showSemanticLocations(
+                    reply,
+                    "References · " + reply.server,
+                    LspResults.locations(reply.message, reply.uris)
+                )
+            )
+        ) return;
         ForgeApplication.OpenDocument d = current();
         if (d == null) return;
         String word = com.forgeide.core.language.Language.wordAt(
@@ -2446,6 +2698,39 @@ public final class MainActivity extends Activity {
     }
 
     private void format() {
+        ForgeApplication.OpenDocument target = current();
+        CodeEditor targetEditor = focused;
+        long targetRevision = target == null ? -1 : target.revision.get();
+        if (
+            useSemantic("formatting", reply -> {
+                CompletableFuture.supplyAsync(
+                    () -> {
+                        try {
+                            return LspResults.applyEdits(reply.source, reply.message);
+                        } catch (IOException error) {
+                            throw new CompletionException(error);
+                        }
+                    },
+                    analysis
+                ).whenComplete((formatted, error) ->
+                    app.main.post(() -> {
+                        if (
+                            !semantic.isCurrent(reply) ||
+                            !ownsDocumentResult(targetEditor, target, targetRevision)
+                        ) {
+                            toast("Document changed; formatting discarded");
+                            return;
+                        }
+                        if (error != null) {
+                            error(error);
+                            return;
+                        }
+                        targetEditor.getText().replace(0, targetEditor.getText().length(), formatted);
+                        toast("Formatted · " + reply.server);
+                    })
+                );
+            })
+        ) return;
         ForgeApplication.OpenDocument d = current();
         if (d == null) return;
         CodeEditor editor = focused;
@@ -3537,8 +3822,20 @@ public final class MainActivity extends Activity {
         addCommand("search", "Search project / replace across files", "Ctrl+Shift+F", this::projectSearch);
         addCommand("line", "Go to line", "Ctrl+G", this::goToLine);
         addCommand("symbol", "Go to document symbol", "Ctrl+Shift+O", this::symbols);
-        addCommand("definition", "Find local declaration", "F12", this::definition);
-        addCommand("references", "Find textual references in project", "Shift+F12", this::references);
+        addCommand("definition", "Find definition · semantic / local lexical", "F12", this::definition);
+        addCommand("references", "Find references · semantic / textual", "Shift+F12", this::references);
+        addCommand("hover", "Semantic hover / type information", "Ctrl+K", this::semanticHover);
+        addCommand(
+            "semanticCompletion",
+            "Semantic completion suggestions",
+            "Ctrl+Space",
+            this::semanticCompletion
+        );
+        addCommand("languageServers", "Bundled semantic language servers", "", this::semanticTools);
+        addCommand("restartLanguageServer", "Restart language server / refresh project copy", "", () -> {
+            semantic.restart(current());
+            toast("Refreshing offline semantic project copy");
+        });
         addCommand("format", "Format JSON / clean whitespace", "Ctrl+Alt+L", this::format);
         addCommand("run", "Run current file", "F5", () -> startRun(false, null, null));
         addCommand("runConfigured", "Run project configuration", "", this::runConfigured);
@@ -3763,6 +4060,7 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (app != null && app.initialized) {
+            if (semantic != null) semantic.resume(current());
             if (root != null) applySystemBarAppearance();
             app.main.removeCallbacks(autosave);
             app.main.postDelayed(autosave, app.settings.integer("autosaveSeconds") * 1000L);
@@ -3787,6 +4085,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onStop() {
+        if (semantic != null) semantic.suspend();
         super.onStop();
         if (app != null && app.initialized) {
             app.main.removeCallbacks(autosave);
@@ -3818,6 +4117,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         destroyed = true;
+        if (semantic != null) semantic.close();
         if (app != null) {
             app.observers.remove(observer);
             app.main.removeCallbacks(autosave);

@@ -20,7 +20,7 @@ Typing uses the native Sora editor, with selection handles, hardware keyboard su
 
 Use **Settings → Appearance** for theme, syntax palette, font family/size, wrapping, UI scale, and minimap. Editing settings control indentation and automatic pairs. `.forge/settings.json` contains optional project overrides; reopen the project to apply them. Project settings cannot weaken global strict-isolation, time, or output ceilings.
 
-The command palette exposes line comments, duplicate/move/join line, local declarations, symbols, textual references, wrapping/formatting tools, breakpoints, and read-only folded overview. Lexical navigation is intentionally labeled: it is not language-server semantic analysis.
+The command palette exposes line comments, duplicate/move/join line, local declarations, symbols, textual references, wrapping/formatting tools, breakpoints, and read-only folded overview. With language-server switches off, lexical navigation is intentionally labeled. Enable a bundled semantic server separately for type-aware completion, hover, definition/references, symbols, formatting and diagnostics where its negotiated capabilities support them. See [the semantic guide](LANGUAGE_SERVERS.md).
 
 Above 512 KiB the app enters large-file mode and skips whole-file lexical analysis. UTF-8 text larger than 8 MiB, binary data, and invalid UTF-8 are not editable. These checks avoid silently corrupting files or blocking the UI on oversized analysis.
 
@@ -177,7 +177,7 @@ launch policy, not separate language-level security containers.
 The runtime companion deliberately uses legacy target-28 execution compatibility;
 the IDE stays target 35. This is a sideloaded developer bundle, not a Play-ready
 app. Only primary-user arm64-v8a/x86_64 installations are supported. Java SDK,
-pip, TypeScript, extra build systems and semantic LSP/DAP servers are not bundled.
+pip, extra build systems, Java/Kotlin/etc. semantic servers and DAP/debug servers are not bundled. TypeScript and seven offline language servers now ship in the companion; enable their independent switches under **Bundled semantic language servers**. See [versions, safe edits, lifecycle and boundaries](LANGUAGE_SERVERS.md).
 See [installation, storage sizes and the native threat model](NATIVE_RUNTIME.md).
 
 ## Git / GitHub

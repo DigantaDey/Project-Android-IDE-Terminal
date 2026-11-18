@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.*;
 import com.forgeide.core.project.RuntimeSnapshot;
+import com.forgeide.core.toolchain.LanguageServers;
 import com.forgeide.core.toolchain.NativeTools;
 import com.forgeide.runtime.api.*;
 import java.io.*;
@@ -41,12 +42,14 @@ public final class NativeRuntimeService extends Service {
         volatile Path root;
         volatile long output;
         final int cap;
+        final String server;
         Runnable deadline;
 
-        Session(String id, INativeCallback callback, int cap) {
+        Session(String id, INativeCallback callback, int cap, String server) {
             this.id = id;
             this.callback = callback;
             this.cap = cap;
+            this.server = server;
         }
     }
 
@@ -108,10 +111,14 @@ public final class NativeRuntimeService extends Service {
         ) {
             caller();
             if (active != null) throw new IllegalStateException(
-                "Only one native run or PTY session may be active"
+                "Only one native run, PTY or semantic session may be active"
             );
             if (
-                id == null || !id.matches("[a-f0-9-]{36}") || snapshot == null || callback == null
+                options == null ||
+                id == null ||
+                !id.matches("[a-f0-9-]{36}") ||
+                snapshot == null ||
+                callback == null
             ) throw new IllegalArgumentException("Invalid native session");
             if (payload == null) throw new IllegalStateException(unavailable);
             Parcel parcel = Parcel.obtain();
@@ -123,18 +130,34 @@ public final class NativeRuntimeService extends Service {
             } finally {
                 parcel.recycle();
             }
-            String tool = options.getString("tool", "");
-            NativeTools.key(tool);
-            List<String> enabled = Arrays.asList(
-                options.getStringArray("enabled") == null ? new String[0] : options.getStringArray("enabled")
-            );
-            if (
-                !enabled.contains(tool) || (tool.equals("npm") && !enabled.contains("node"))
-            ) throw new SecurityException("Native tool is switched off");
+            String server = options.getString("server", "");
+            if (!server.isEmpty()) {
+                LanguageServers.key(server);
+                String[] enabledServers = options.getStringArray("enabledServers");
+                if (
+                    enabledServers == null || !Arrays.asList(enabledServers).contains(server)
+                ) throw new SecurityException("Language server is switched off");
+                // No project-provided argv, environment, interactive mode or network consent.
+                options = new Bundle(options);
+                options.putBoolean("network", false);
+                options.putBoolean("interactive", false);
+            } else {
+                String tool = options.getString("tool", "");
+                NativeTools.key(tool);
+                List<String> enabled = Arrays.asList(
+                    options.getStringArray("enabled") == null
+                        ? new String[0]
+                        : options.getStringArray("enabled")
+                );
+                if (
+                    !enabled.contains(tool) || (tool.equals("npm") && !enabled.contains("node"))
+                ) throw new SecurityException("Native tool is switched off");
+            }
             Session s = new Session(
                 id,
                 callback,
-                Math.max(1024, Math.min(1024 * 1024, options.getInt("output", 262144)))
+                Math.max(1024, Math.min(1024 * 1024, options.getInt("output", 262144))),
+                server
             );
             active = s;
             try {
@@ -143,7 +166,8 @@ public final class NativeRuntimeService extends Service {
                 active = null;
                 throw new IllegalStateException("IDE callback has died", dead);
             }
-            PREPARE.execute(() -> launch(s, snapshot, new Bundle(options)));
+            Bundle launchOptions = new Bundle(options);
+            PREPARE.execute(() -> launch(s, snapshot, launchOptions));
         }
 
         @Override
@@ -223,34 +247,41 @@ public final class NativeRuntimeService extends Service {
             Path project = Files.createDirectory(s.root.resolve("project"));
             RuntimeSnapshot.read(project, source);
             check(s);
+            boolean semantic = !s.server.isEmpty();
             boolean interactive = options.getBoolean("interactive");
             String file = options.getString("file", ""),
                 directory = options.getString("cwd", "");
-            NativeTools.relativePath(file, interactive || options.getString("tool", "").equals("npm"));
+            NativeTools.relativePath(
+                file,
+                semantic || interactive || options.getString("tool", "").equals("npm")
+            );
             NativeTools.relativePath(directory, true);
             Path cwd = directory.isEmpty() ? project : NativePayload.inside(project, directory);
             if (!Files.isDirectory(cwd, LinkOption.NOFOLLOW_LINKS)) throw new IOException(
                 "Native working directory does not exist"
             );
             if (
+                !semantic &&
                 !interactive &&
                 !options.getString("tool", "").equals("npm") &&
                 !Files.isRegularFile(NativePayload.inside(project, file), LinkOption.NOFOLLOW_LINKS)
             ) throw new IOException("Native entry file is missing from the project copy");
             String[] args = options.getStringArray("arguments");
-            List<String> command = NativeTools.command(
-                options.getString("tool", ""),
-                options.getString("language", ""),
-                payload.prefix.toString(),
-                project.toString(),
-                s.root.resolve("program").toString(),
-                file,
-                args == null ? List.of() : Arrays.asList(args),
-                interactive
-            );
+            List<String> command = semantic
+                ? LanguageServers.command(s.server, payload.prefix.toString())
+                : NativeTools.command(
+                      options.getString("tool", ""),
+                      options.getString("language", ""),
+                      payload.prefix.toString(),
+                      project.toString(),
+                      s.root.resolve("program").toString(),
+                      file,
+                      args == null ? List.of() : Arrays.asList(args),
+                      interactive
+                  );
             Map<String, String> requested = new LinkedHashMap<>();
             Bundle environment = options.getBundle("environment");
-            if (environment != null) for (String key : environment.keySet())
+            if (!semantic && environment != null) for (String key : environment.keySet())
                 requested.put(key, environment.getString(key, ""));
             Map<String, String> env = NativeTools.environment(requested);
             String prefix = payload.prefix.toString();
@@ -279,6 +310,7 @@ public final class NativeRuntimeService extends Service {
             env.put("LANG", "C.UTF-8");
             env.put("TERM", "xterm-256color");
             env.put("COLORTERM", "truecolor");
+            env.put("BASH_IDE_LOG_LEVEL", "error");
             env.put("PS1", "forge \\w $ ");
             env.put("PYTHONHOME", prefix);
             env.put("PYTHONNOUSERSITE", "1");
@@ -293,27 +325,55 @@ public final class NativeRuntimeService extends Service {
             env.forEach((k, v) -> envp.add(k + "=" + v));
             synchronized (this) {
                 check(s);
-                long[] process = NativePty.start(
-                    cwd.toString(),
-                    command.toArray(new String[0]),
-                    envp.toArray(new String[0]),
-                    options.getInt("rows", 24),
-                    options.getInt("columns", 80),
-                    options.getBoolean("network")
-                );
-                s.pid = (int) process[0];
-                s.master = ParcelFileDescriptor.adoptFd((int) process[1]);
-                s.input = new ParcelFileDescriptor.AutoCloseOutputStream(
-                    ParcelFileDescriptor.dup(s.master.getFileDescriptor())
-                );
+                if (!semantic) {
+                    long[] process = NativePty.start(
+                        cwd.toString(),
+                        command.toArray(new String[0]),
+                        envp.toArray(new String[0]),
+                        options.getInt("rows", 24),
+                        options.getInt("columns", 80),
+                        options.getBoolean("network")
+                    );
+                    s.pid = (int) process[0];
+                    s.master = ParcelFileDescriptor.adoptFd((int) process[1]);
+                    s.input = new ParcelFileDescriptor.AutoCloseOutputStream(
+                        ParcelFileDescriptor.dup(s.master.getFileDescriptor())
+                    );
+                }
             }
             Bundle ready = new Bundle();
             ready.putInt("uid", android.os.Process.myUid());
-            ready.putInt("pid", s.pid);
+            ready.putString("prefix", prefix);
+            ready.putString("server", s.server);
             ready.putString("project", project.toString());
             ready.putBoolean("network", options.getBoolean("network"));
-            s.callback.onReady(ready);
-            long timeout = interactive
+            if (semantic) {
+                long[] process;
+                synchronized (this) {
+                    check(s);
+                    process = NativePty.startStdio(
+                        cwd.toString(),
+                        command.toArray(new String[0]),
+                        envp.toArray(new String[0])
+                    );
+                    s.pid = (int) process[0];
+                }
+                try (
+                    ParcelFileDescriptor input = ParcelFileDescriptor.adoptFd((int) process[1]);
+                    ParcelFileDescriptor output = ParcelFileDescriptor.adoptFd((int) process[2]);
+                    ParcelFileDescriptor error = ParcelFileDescriptor.adoptFd((int) process[3])
+                ) {
+                    ready.putParcelable("stdin", input);
+                    ready.putParcelable("stdout", output);
+                    ready.putParcelable("stderr", error);
+                    ready.putInt("pid", s.pid);
+                    s.callback.onReady(ready);
+                }
+            } else {
+                ready.putInt("pid", s.pid);
+                s.callback.onReady(ready);
+            }
+            long timeout = semantic || interactive
                 ? 30L * 60 * 1000
                 : Math.max(100, Math.min(60000, options.getLong("timeout", 10000)));
             synchronized (this) {
@@ -321,10 +381,10 @@ public final class NativeRuntimeService extends Service {
                 s.deadline = () -> stopSession(s, 124, "Native session deadline reached");
                 main.postDelayed(s.deadline, timeout);
             }
-            Thread output = new Thread(() -> readOutput(s), "native-pty-output");
-            output.start();
+            Thread output = semantic ? null : new Thread(() -> readOutput(s), "native-pty-output");
+            if (output != null) output.start();
             String initial = options.getString("stdin", "");
-            if (!interactive) {
+            if (!semantic && !interactive) {
                 byte[] bytes = (initial + "\u0004\u0004").getBytes(StandardCharsets.UTF_8);
                 synchronized (s.input) {
                     s.input.write(bytes);
@@ -333,7 +393,7 @@ public final class NativeRuntimeService extends Service {
             }
             int status = NativePty.waitFor(s.pid);
             // Drain PTY output before reporting the exit. EIO is normal when its slave closes.
-            output.join(1000);
+            if (output != null) output.join(1000);
             stopSession(s, status, "");
         } catch (Exception error) {
             stopSession(s, s.cancelled ? 130 : 1, String.valueOf(error.getMessage()));
