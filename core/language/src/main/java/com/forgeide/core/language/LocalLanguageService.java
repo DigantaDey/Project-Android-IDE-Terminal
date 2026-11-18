@@ -36,7 +36,7 @@ public final class LocalLanguageService implements LanguageService {
     @Override
     public List<Symbol> symbols(Language lang, String text, CancellationToken cancel) {
         List<Symbol> out = new ArrayList<>();
-        Matcher m = DECLARATION.matcher(text);
+        Matcher m = DECLARATION.matcher(new BoundedText(text, 500));
         int line = 0,
             cursor = 0;
         while (m.find()) {
@@ -111,6 +111,17 @@ public final class LocalLanguageService implements LanguageService {
     /** Lossless JSON formatting or trailing-whitespace cleanup; never pretend this is Prettier/Black. */
     public String format(Language lang, String text, int indent) {
         if (lang.id().equals("json")) return JsonFormatter.format(text, indent);
-        return text.replaceAll("(?m)[ \\t]+$", "");
+        StringBuilder result = new StringBuilder(text.length());
+        int start = 0;
+        for (int i = 0; i <= text.length(); i++) if (
+            i == text.length() || text.charAt(i) == '\n' || text.charAt(i) == '\r'
+        ) {
+            int end = i;
+            while (end > start && (text.charAt(end - 1) == ' ' || text.charAt(end - 1) == '\t')) end--;
+            result.append(text, start, end);
+            if (i < text.length()) result.append(text.charAt(i));
+            start = i + 1;
+        }
+        return result.toString();
     }
 }

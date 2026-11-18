@@ -45,4 +45,28 @@ public class FormattingAndSqlTest {
     public void sqlKeywordIgnoresComments() {
         assertEquals("ATTACH", SqlStatements.keyword("-- test\n/* test */ ATTACH 'secret' AS other"));
     }
+
+    @Test(timeout = 3000)
+    public void whitespaceCleanupIsLinearAndPreservesNewlines() {
+        String input = " ".repeat(200000) + "x  \r\nnext\t\r\n  ";
+        String value = new LocalLanguageService().format(
+            LanguageRegistry.builtins().get("plaintext"),
+            input,
+            4
+        );
+        assertEquals(" ".repeat(200000) + "x\r\nnext\r\n", value);
+    }
+
+    @Test
+    public void sqlSecurityKeywordRecognizesByteOrderMarks() {
+        assertEquals("ATTACH", SqlStatements.keyword(" \ufeff /* comment */ ATTACH ':memory:' AS other"));
+    }
+
+    @Test
+    public void sqlStatementLimitIncludesUnterminatedTail() {
+        try {
+            SqlStatements.split("SELECT 1;".repeat(2000) + "SELECT 2");
+            fail();
+        } catch (IllegalArgumentException expected) {}
+    }
 }

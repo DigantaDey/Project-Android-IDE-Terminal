@@ -115,7 +115,11 @@ public final class JavaScriptRuntime {
                 Scriptable env = cx.newObject(scope);
                 environment.forEach((key, value) -> ScriptableObject.putProperty(env, key, value));
                 ScriptableObject.putProperty(scope, "env", env);
-                String[] lines = stdin.split("\n", -1);
+                String[] inputLines = stdin.isEmpty() ? new String[0] : stdin.split("\\r\\n|\\n|\\r", -1);
+                if (inputLines.length > 0 && inputLines[inputLines.length - 1].isEmpty()) {
+                    inputLines = Arrays.copyOf(inputLines, inputLines.length - 1);
+                }
+                final String[] lines = inputLines;
                 int[] inputIndex = { 0 };
                 ScriptableObject.putProperty(
                     scope,

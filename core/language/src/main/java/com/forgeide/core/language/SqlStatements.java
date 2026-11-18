@@ -75,6 +75,7 @@ public final class SqlStatements {
         if (quote != 0 || block) throw new IllegalArgumentException("Unclosed SQL quote or comment");
         String tail = sql.substring(start).trim();
         if (!keyword(tail).isEmpty()) out.add(tail);
+        if (out.size() > 2000) throw new IllegalArgumentException("Maximum 2000 SQL statements per run");
         return out;
     }
 

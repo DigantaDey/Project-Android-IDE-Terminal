@@ -33,9 +33,11 @@ public final class ScriptTokenizer implements Tokenizer {
                 s.mark(TokenType.STRING);
                 s.readString(c, true);
                 s.flush();
-            } else if (Character.isWhitespace(c)) {
+            } else if ((Character.isWhitespace(c) || (sql && c == '\ufeff'))) {
                 s.mark(TokenType.WHITESPACE);
-                while (!s.atEnd() && Character.isWhitespace(s.peek())) s.advance();
+                while (
+                    !s.atEnd() && (Character.isWhitespace(s.peek()) || (sql && s.peek() == '\ufeff'))
+                ) s.advance();
                 s.flush();
             } else if (!sql && c == '$') {
                 s.mark(TokenType.VARIABLE);

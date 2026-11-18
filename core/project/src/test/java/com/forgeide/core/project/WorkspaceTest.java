@@ -123,6 +123,23 @@ public class WorkspaceTest {
     }
 
     @Test
+    public void zipPreservesEmptyFoldersAndExcludesPrivateStores() throws Exception {
+        Workspace a = ws(),
+            b = ws();
+        a.mkdir("src/empty");
+        a.write(".git/config", "private metadata");
+        a.write(".forge-trash/hidden", "deleted");
+        a.write(".forge/settings.json", "{}");
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        ProjectArchive.exportZip(a, bytes);
+        ProjectArchive.importZip(b, new ByteArrayInputStream(bytes.toByteArray()));
+        assertTrue(b.isDirectory("src/empty"));
+        assertFalse(Files.exists(b.resolve(".git")));
+        assertFalse(Files.exists(b.resolve(".forge-trash")));
+        assertEquals("{}", b.read(".forge/settings.json"));
+    }
+
+    @Test
     public void zipSlipRejected() throws Exception {
         Workspace w = ws();
         ByteArrayOutputStream out = new ByteArrayOutputStream();

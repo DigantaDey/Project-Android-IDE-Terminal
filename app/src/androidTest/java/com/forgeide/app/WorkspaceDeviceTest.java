@@ -60,6 +60,64 @@ public final class WorkspaceDeviceTest {
     }
 
     @Test
+    public void splitSharesContentAndSurvivesRecreation() {
+        activity
+            .getScenario()
+            .onActivity(a -> {
+                long time = android.os.SystemClock.uptimeMillis();
+                assertTrue(
+                    a.dispatchKeyEvent(
+                        new android.view.KeyEvent(
+                            time,
+                            time,
+                            android.view.KeyEvent.ACTION_DOWN,
+                            android.view.KeyEvent.KEYCODE_BACKSLASH,
+                            0,
+                            android.view.KeyEvent.META_CTRL_ON
+                        )
+                    )
+                );
+                CodeEditor left = a.findViewById(MainActivity.EDITOR_ID),
+                    right = a.findViewById(MainActivity.SECONDARY_EDITOR_ID);
+                assertNotNull(right);
+                assertSame(left.getText(), right.getText());
+            });
+        activity.getScenario().recreate();
+        activity
+            .getScenario()
+            .onActivity(a -> {
+                CodeEditor left = a.findViewById(MainActivity.EDITOR_ID),
+                    right = a.findViewById(MainActivity.SECONDARY_EDITOR_ID);
+                assertNotNull(right);
+                assertSame(left.getText(), right.getText());
+            });
+    }
+
+    @Test
+    public void terminalTranscriptIsRetainedAcrossRecreation() {
+        AtomicReference<com.forgeide.core.terminal.TerminalSession> session = new AtomicReference<>();
+        AtomicReference<String> before = new AtomicReference<>();
+        activity
+            .getScenario()
+            .onActivity(a -> {
+                ForgeApplication app = (ForgeApplication) a.getApplication();
+                session.set(app.terminalSessions.get(app.project).get(0));
+                before.set(session.get().output());
+                session.get().append("recreation-marker\n");
+            });
+        activity.getScenario().recreate();
+        activity
+            .getScenario()
+            .onActivity(a -> {
+                ForgeApplication app = (ForgeApplication) a.getApplication();
+                assertSame(session.get(), app.terminalSessions.get(app.project).get(0));
+                assertTrue(session.get().output().contains("recreation-marker"));
+                session.get().clear();
+                session.get().append(before.get());
+            });
+    }
+
+    @Test
     public void commandPaletteAndNativeControlsArePresent() {
         activity
             .getScenario()
@@ -119,6 +177,16 @@ public final class WorkspaceDeviceTest {
         try (OutputStream out = new FileOutputStream(new File(dir, "workspace.png"))) {
             assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out));
         }
+        Bitmap thumbnail = Bitmap.createScaledBitmap(
+            bitmap,
+            360,
+            Math.max(1, (bitmap.getHeight() * 360) / bitmap.getWidth()),
+            true
+        );
+        try (OutputStream output = new FileOutputStream(new File(dir, "workspace-preview.jpg"))) {
+            assertTrue(thumbnail.compress(Bitmap.CompressFormat.JPEG, 72, output));
+        }
+        thumbnail.recycle();
         bitmap.recycle();
     }
 }

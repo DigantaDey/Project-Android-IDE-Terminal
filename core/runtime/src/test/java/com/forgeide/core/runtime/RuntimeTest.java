@@ -102,6 +102,29 @@ public class RuntimeTest {
     }
 
     @Test
+    public void stdinUsesLineReaderEndOfFileSemantics() {
+        for (String input : List.of("", "a\n", "a\r\n", "\n")) {
+            StringBuilder output = new StringBuilder();
+            JavaScriptRuntime.Result result = new JavaScriptRuntime().run(
+                "print(readLine());print(readLine());",
+                "input.js",
+                List.of(),
+                Map.of(),
+                input,
+                SandboxPolicy.safeDefault(),
+                new CancellationToken(),
+                output::append,
+                null
+            );
+            assertEquals(0, result.exitCode);
+            assertEquals(
+                input.isEmpty() ? "null\nnull\n" : input.equals("\n") ? "\nnull\n" : "a\nnull\n",
+                output.toString()
+            );
+        }
+    }
+
+    @Test
     public void javaAndFilesystemAreNotExposed() {
         StringBuilder out = new StringBuilder();
         assertEquals(

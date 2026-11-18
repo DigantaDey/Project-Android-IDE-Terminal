@@ -57,6 +57,9 @@ public final class CredentialVault {
         String value = context.getSharedPreferences("credential-vault", 0).getString("github", "");
         if (value.isEmpty()) return "";
         String[] parts = value.split(":", 2);
+        if (parts.length != 2) throw new GeneralSecurityException(
+            "Stored credential is damaged; disconnect and reconnect the account"
+        );
         Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
         c.init(
             Cipher.DECRYPT_MODE,
@@ -71,7 +74,9 @@ public final class CredentialVault {
     }
 
     public synchronized void clear() throws Exception {
-        context.getSharedPreferences("credential-vault", 0).edit().clear().commit();
+        if (
+            !context.getSharedPreferences("credential-vault", 0).edit().clear().commit()
+        ) throw new java.io.IOException("Credential could not be deleted");
         KeyStore store = KeyStore.getInstance("AndroidKeyStore");
         store.load(null);
         if (store.containsAlias(ALIAS)) store.deleteEntry(ALIAS);

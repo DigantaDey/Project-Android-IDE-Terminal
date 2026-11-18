@@ -12,10 +12,36 @@ public final class ProjectArchive {
 
     public static void exportZip(Workspace w, OutputStream destination) throws IOException {
         try (ZipOutputStream zip = new ZipOutputStream(destination)) {
-            for (String path : w.files(20000)) {
-                zip.putNextEntry(new ZipEntry(path));
-                Files.copy(w.resolve(path), zip);
-                zip.closeEntry();
+            Deque<String> directories = new ArrayDeque<>();
+            directories.add("");
+            int entries = 0;
+            long bytes = 0;
+            while (!directories.isEmpty()) {
+                String directory = directories.removeFirst();
+                for (String path : w.list(directory)) {
+                    if (Thread.currentThread().isInterrupted()) throw new IOException("Export interrupted");
+                    boolean folder = w.isDirectory(path);
+                    String name = path.substring(path.lastIndexOf('/') + 1);
+                    if (folder && Workspace.ignoredDirectory(name)) continue;
+                    if (++entries > 20000 || path.split("/").length > 64) throw new IOException(
+                        "Project exceeds archive entry/depth limits; export smaller subprojects"
+                    );
+                    if (folder) {
+                        zip.putNextEntry(new ZipEntry(path + "/"));
+                        zip.closeEntry();
+                        directories.addLast(path);
+                    } else {
+                        Path source = w.resolve(path);
+                        if (!Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) continue;
+                        bytes += Files.size(source);
+                        if (bytes > MAX_BYTES) throw new IOException(
+                            "Project exceeds the 256 MiB backup limit"
+                        );
+                        zip.putNextEntry(new ZipEntry(path));
+                        Files.copy(source, zip);
+                        zip.closeEntry();
+                    }
+                }
             }
         }
     }

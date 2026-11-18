@@ -8,5 +8,15 @@
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">#111318</item>
     </style>
+    <style name="Theme.Forge.Light" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#9F4E26</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:navigationBarColor">#F0EFEB</item>
+        <item name="android:statusBarColor">#F0EFEB</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#F9F8F5</item>
+    </style>
     <string name="app_name">Forge IDE</string>
 </resources>

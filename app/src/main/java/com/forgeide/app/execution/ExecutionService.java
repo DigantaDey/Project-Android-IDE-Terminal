@@ -20,6 +20,16 @@ public final class ExecutionService extends Service {
     private ScriptDebugger debugger;
     private volatile boolean running;
 
+    private static boolean networkSocketDenied() {
+        // No packets are sent: creating an unconnected local UDP socket exercises the
+        // kernel's INTERNET permission boundary without relying on external connectivity.
+        try (java.net.DatagramSocket socket = new java.net.DatagramSocket()) {
+            return false;
+        } catch (java.net.SocketException | SecurityException denied) {
+            return true;
+        }
+    }
+
     private void verifyCaller() {
         if (Binder.getCallingUid() != getApplicationInfo().uid) throw new SecurityException(
             "Execution is private to Forge IDE"
@@ -68,7 +78,12 @@ public final class ExecutionService extends Service {
                                 "isolated",
                                 android.os.Process.myUid() != getApplicationInfo().uid,
                                 "hostFilesReadable",
-                                new File(getApplicationInfo().dataDir, "state").canRead(),
+                                new File(
+                                    getApplicationInfo().dataDir,
+                                    "state/isolation-witness.txt"
+                                ).canRead(),
+                                "networkSocketDenied",
+                                networkSocketDenied(),
                                 "networkPermission",
                                 checkSelfPermission(android.Manifest.permission.INTERNET) ==
                                     android.content.pm.PackageManager.PERMISSION_GRANTED

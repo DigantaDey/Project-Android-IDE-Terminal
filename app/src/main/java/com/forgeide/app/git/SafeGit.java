@@ -106,6 +106,9 @@ public final class SafeGit implements GitService {
         if (
             Files.exists(meta.resolve("commondir")) || Files.exists(meta.resolve("objects/info/alternates"))
         ) throw new IOException("External Git object/worktree stores are not permitted");
+        if (Files.size(workspace.resolve(".git/config")) > 65536) throw new IOException(
+            "Git configuration exceeds 64 KiB safety limit"
+        );
         String config = com.forgeide.core.util.AtomicFiles.readUtf8(workspace.resolve(".git/config"));
         if (
             config.matches("(?is).*(\\[\\s*(include|includeIf|filter|url|gpg)\\b|sshCommand|hooksPath).*")

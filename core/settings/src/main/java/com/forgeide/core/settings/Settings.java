@@ -31,6 +31,13 @@ public final class Settings {
     }
 
     public synchronized Object get(String key) {
+        // An imported project is not permission to weaken the user's global sandbox policy.
+        if (key.equals("requireHardLimits")) return (
+            Boolean.TRUE.equals(global.get(key)) || Boolean.TRUE.equals(project.get(key))
+        );
+        if (
+            (key.equals("executionSeconds") || key.equals("outputKiB")) && project.get(key) instanceof Number
+        ) return Math.min(((Number) global.get(key)).longValue(), ((Number) project.get(key)).longValue());
         return project.containsKey(key) ? project.get(key) : global.get(key);
     }
 
@@ -130,8 +137,8 @@ public final class Settings {
     }
 
     public synchronized Map<String, Object> snapshot() {
-        Map<String, Object> m = new LinkedHashMap<>(global);
-        m.putAll(project);
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (String key : global.keySet()) m.put(key, get(key));
         return m;
     }
 }

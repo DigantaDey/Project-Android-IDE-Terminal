@@ -79,28 +79,51 @@ public final class ScriptDebugger implements Debugger {
         }
     }
 
+    private static String bounded(String text, int length) {
+        return text == null ? "<script>" : text.substring(0, Math.min(text.length(), length));
+    }
+
     private String snapshot(String reason) {
+        boolean previous = evaluating;
+        evaluating = true;
+        try {
+            return snapshotValues(reason);
+        } finally {
+            evaluating = previous;
+        }
+    }
+
+    private String snapshotValues(String reason) {
         List<Object> frames = new ArrayList<>();
-        int count = 0;
+        int count = 0,
+            budget = 12000;
         for (Frame f : stack) {
-            if (++count > 64) break;
+            if (++count > 32 || budget <= 0) break;
             Map<String, Object> variables = new LinkedHashMap<>();
             int n = 0;
             for (Object key : f.scope.getIds()) {
-                if (++n > 100) break;
-                Object v = key instanceof Number
-                    ? f.scope.get(((Number) key).intValue(), f.scope)
-                    : f.scope.get(key.toString(), f.scope);
-                variables.put(key.toString(), value(v));
+                if (++n > 32 || budget <= 0) break;
+                Object v;
+                try {
+                    v = key instanceof Number
+                        ? f.scope.get(((Number) key).intValue(), f.scope)
+                        : f.scope.get(key.toString(), f.scope);
+                } catch (RuntimeException unavailable) {
+                    v = "<unavailable>";
+                }
+                String name = bounded(key.toString(), 80),
+                    display = value(v);
+                budget -= name.length() + display.length() + 24;
+                variables.put(name, display);
             }
             frames.add(
                 Map.of(
                     "name",
                     (f.script.getFunctionName() == null || f.script.getFunctionName().isEmpty())
                         ? "<main>"
-                        : f.script.getFunctionName(),
+                        : bounded(f.script.getFunctionName(), 80),
                     "file",
-                    f.script.getSourceName(),
+                    bounded(f.script.getSourceName(), 200),
                     "line",
                     f.line,
                     "variables",
@@ -135,7 +158,9 @@ public final class ScriptDebugger implements Debugger {
             if (hit && !breakpoints.get(line).isBlank()) try {
                 hit = Context.toBoolean(evaluate(cx, breakpoints.get(line), this));
             } catch (RuntimeException e) {
-                events.accept(Json.write(Map.of("event", "conditionError", "message", e.getMessage())));
+                events.accept(
+                    Json.write(Map.of("event", "conditionError", "message", String.valueOf(e.getMessage())))
+                );
                 hit = false;
             }
             boolean stepHit =
@@ -163,7 +188,7 @@ public final class ScriptDebugger implements Debugger {
                         try {
                             result = value(evaluate(cx, watch, this));
                         } catch (RuntimeException e) {
-                            result = e.getMessage();
+                            result = String.valueOf(e.getMessage());
                         }
                         events.accept(
                             Json.write(Map.of("event", "evaluation", "expression", watch, "value", result))
