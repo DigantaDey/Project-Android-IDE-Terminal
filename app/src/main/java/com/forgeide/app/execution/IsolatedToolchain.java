@@ -83,7 +83,7 @@ public final class IsolatedToolchain implements DebuggableToolchain {
             err,
             s -> {}
         );
-        cancel.onCancel(client::cancel);
+        cancel.onCancel(() -> client.cancel(f));
         return f;
     }
 
@@ -101,7 +101,7 @@ public final class IsolatedToolchain implements DebuggableToolchain {
         validate(config, policy);
         if (!supportsDebug()) throw new UnsupportedOperationException("This provider has no debugger");
         CompletableFuture<Integer> f = client.run(source, config, policy, points, true, out, err, events);
-        cancel.onCancel(client::cancel);
+        cancel.onCancel(() -> client.cancel(f));
         return f;
     }
 }

@@ -122,8 +122,63 @@ public final class Workspace {
         Files.move(a, b);
     }
 
-    public void duplicate(String from, String to) throws IOException {
-        Files.copy(resolve(from), resolve(to));
+    public synchronized void duplicate(String from, String to) throws IOException {
+        Path source = resolve(from),
+            destination = resolve(to);
+        if (
+            source.equals(root) || destination.equals(root) || destination.startsWith(source)
+        ) throw new IOException("Cannot copy a project root or copy a folder into itself");
+        if (Files.exists(destination)) throw new FileAlreadyExistsException(to);
+        if (!Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS)) {
+            Files.copy(source, destination);
+            return;
+        }
+        Path stage = Files.createTempDirectory(root, ".forge-save-copy-");
+        long[] bytes = { 0 };
+        int[] entries = { 0 };
+        try {
+            Files.walkFileTree(
+                source,
+                EnumSet.noneOf(FileVisitOption.class),
+                64,
+                new SimpleFileVisitor<Path>() {
+                    private Path target(Path path) {
+                        return stage.resolve(source.relativize(path));
+                    }
+
+                    private void check() throws IOException {
+                        if (Thread.currentThread().isInterrupted()) throw new IOException("Copy interrupted");
+                        if (++entries[0] > 20000) throw new IOException("Folder copy exceeds 20,000 entries");
+                    }
+
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path path, BasicFileAttributes attrs)
+                        throws IOException {
+                        check();
+                        if (!path.equals(source)) Files.createDirectory(target(path));
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path path, BasicFileAttributes attrs)
+                        throws IOException {
+                        check();
+                        if (!attrs.isRegularFile() || attrs.isSymbolicLink()) throw new IOException(
+                            "Only regular project files may be copied"
+                        );
+                        bytes[0] += attrs.size();
+                        if (bytes[0] > ProjectArchive.MAX_BYTES) throw new IOException(
+                            "Folder copy exceeds 256 MiB"
+                        );
+                        Files.copy(path, target(path));
+                        return FileVisitResult.CONTINUE;
+                    }
+                }
+            );
+            Files.move(stage, destination);
+        } finally {
+            if (Files.exists(stage)) delete(relative(stage));
+        }
     }
 
     /** Destructive operations are explicit; the Android UI moves files to .forge-trash first. */

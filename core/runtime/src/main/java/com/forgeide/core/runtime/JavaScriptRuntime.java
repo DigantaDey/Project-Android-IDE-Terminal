@@ -44,6 +44,21 @@ public final class JavaScriptRuntime {
         Consumer<String> output,
         ScriptDebugger debugger
     ) {
+        return run(source, name, arguments, environment, stdin, policy, cancel, output, output, debugger);
+    }
+
+    public Result run(
+        String source,
+        String name,
+        List<String> arguments,
+        Map<String, String> environment,
+        String stdin,
+        SandboxPolicy policy,
+        CancellationToken cancel,
+        Consumer<String> output,
+        Consumer<String> errors,
+        ScriptDebugger debugger
+    ) {
         if (source.length() > 512 * 1024) return new Result(
             2,
             "Script exceeds 512 KiB execution limit",
@@ -81,26 +96,22 @@ public final class JavaScriptRuntime {
                     cx.setDebugger(debugger, null);
                 }
                 ScriptableObject scope = cx.initSafeStandardObjects(null, true);
-                BaseFunction print = new BaseFunction() {
-                    @Override
-                    public Object call(Context c, Scriptable s, Scriptable self, Object[] a) {
-                        StringBuilder line = new StringBuilder();
-                        for (Object value : a) {
-                            if (line.length() > 0) line.append(' ');
-                            line.append(Context.toString(value));
-                            if (line.length() > policy.outputBytes) break;
-                        }
-                        line.append('\n');
-                        limiter.accept(line.toString());
-                        return Undefined.instance;
-                    }
-                };
+                BaseFunction print = printer(limiter, output, policy.outputBytes);
+                BaseFunction errorPrint = printer(limiter, errors, policy.outputBytes);
                 ScriptableObject.putProperty(scope, "print", print);
                 Scriptable console = cx.newObject(scope);
                 for (String method : List.of("log", "info", "warn", "error", "debug"))
-                    ScriptableObject.putProperty(console, method, print);
+                    ScriptableObject.putProperty(
+                        console,
+                        method,
+                        method.equals("warn") || method.equals("error") ? errorPrint : print
+                    );
                 ScriptableObject.putProperty(scope, "console", console);
-                ScriptableObject.putProperty(scope, "arguments", cx.newArray(scope, arguments.toArray()));
+                ScriptableObject.putProperty(
+                    scope,
+                    "arguments",
+                    cx.newArray(scope, arguments.toArray(new Object[arguments.size()]))
+                );
                 Scriptable env = cx.newObject(scope);
                 environment.forEach((key, value) -> ScriptableObject.putProperty(env, key, value));
                 ScriptableObject.putProperty(scope, "env", env);
@@ -131,5 +142,22 @@ public final class JavaScriptRuntime {
         } finally {
             if (debugger != null) debugger.finished();
         }
+    }
+
+    private static BaseFunction printer(OutputLimiter limiter, Consumer<String> sink, int budget) {
+        return new BaseFunction() {
+            @Override
+            public Object call(Context c, Scriptable scope, Scriptable self, Object[] args) {
+                StringBuilder line = new StringBuilder();
+                for (Object value : args) {
+                    if (line.length() > 0) line.append(' ');
+                    line.append(Context.toString(value));
+                    if (line.length() > budget) break;
+                }
+                line.append('\n');
+                limiter.acceptTo(line.toString(), sink);
+                return Undefined.instance;
+            }
+        };
     }
 }

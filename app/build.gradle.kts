@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":core:recovery"))
     implementation(project(":core:commands"))
     implementation("androidx.core:core:1.13.1")
+    implementation("androidx.sqlite:sqlite-bundled:2.6.2")
     implementation("io.github.Rosemoe.sora-editor:editor:0.23.5")
     implementation("org.eclipse.jgit:org.eclipse.jgit:5.13.3.202401111512-r")
     implementation("org.slf4j:slf4j-nop:1.7.36")

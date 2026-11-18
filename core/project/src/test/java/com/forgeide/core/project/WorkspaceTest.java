@@ -34,6 +34,38 @@ public class WorkspaceTest {
     }
 
     @Test
+    public void directoryDuplicateIsConfinedAndPreservesEmptyDirectories() throws Exception {
+        Workspace w = ws();
+        w.write("src/nested/main.js", "print(42)");
+        w.mkdir("src/empty");
+        w.duplicate("src", "copy");
+        assertEquals("print(42)", w.read("copy/nested/main.js"));
+        assertTrue(w.isDirectory("copy/empty"));
+        try {
+            w.duplicate("src", "src/nested/copy");
+            fail();
+        } catch (IOException expected) {}
+        try {
+            w.duplicate("src", "copy");
+            fail();
+        } catch (IOException expected) {}
+        assertEquals("print(42)", w.read("copy/nested/main.js"));
+    }
+
+    @Test
+    public void directoryDuplicateNeverFollowsLinksOrLeavesPartialCopies() throws Exception {
+        Workspace w = ws();
+        w.mkdir("src");
+        Files.createSymbolicLink(w.resolve("src").resolve("link"), temp.newFile().toPath());
+        try {
+            w.duplicate("src", "copy");
+            fail();
+        } catch (IOException expected) {}
+        assertFalse(Files.exists(w.resolve("copy")));
+        assertEquals(1, w.list("").size());
+    }
+
+    @Test
     public void traversalAndAbsolutePathsDenied() throws Exception {
         Workspace w = ws();
         for (String p : new String[] { "../outside", "/tmp/host", "dir/../../outside", "a\\..\\host" })
