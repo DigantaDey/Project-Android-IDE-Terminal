@@ -53,6 +53,27 @@ disables output-triggered clipboard access, and reformats Java; no Termux app
 service/JNI/process launcher is linked into the IDE. See
 [provenance and changes](tools/terminal/README.md).
 
+## Bundled semantic language servers
+
+clangd ships in the same pinned LLVM/Clang package and retains its LLVM notices.
+The JS/WASM servers are Pyright 1.1.414 (MIT, including typeshed's additional
+notices), TypeScript Language Server 6.1.0 and TypeScript 6.0.2 (Apache-2.0),
+Bash Language Server 5.8.1 (MIT, tree-sitter WASM included), and
+vscode-langservers-extracted 4.10.0 (MIT) for HTML/CSS/JSON. Their complete
+**64-distribution** non-optional transitive inventory, exact versions, license
+identifiers and SHA-512 original npm source URLs are recorded by
+`tools/native/servers/package-lock.json` and packaged as
+`usr/share/forge-lsp/{inventory.json,NOTICE.md}`. All original license, copyright,
+typeshed and third-party notice files remain unchanged within those packages.
+Licenses include MIT, Apache-2.0, BSD-2-Clause, ISC and BlueOak-1.0.0; this list
+does not replace each retained upstream notice. Optional Darwin fsevents is omitted.
+
+`scripts/semantic_bundle.py` extracts verified original distributions without
+running npm/lifecycle scripts. Every original archive is supplied under
+`language-servers/` in the corresponding-source artifact/release, alongside its
+lock and inventory. The IDE's [bundled server notice](licenses/BUNDLED_LANGUAGE_SERVERS.md)
+points to these retained notices. No upstream endorsement is implied.
+
 ## Development-only tools
 
 Gradle 8.10.2 (Apache-2.0), Android Gradle Plugin 8.7.3 (Apache-2.0), JUnit 4.13.2 (EPL-1.0), Hamcrest (BSD-3-Clause), AndroidX Test (Apache-2.0), Prettier 3.6.2 (MIT), prettier-plugin-java 2.7.6 (Apache-2.0), and optional Eclipse ECJ (EPL-2.0) are build/test/formatting tools, not installed native compilers or package managers in the Android IDE.

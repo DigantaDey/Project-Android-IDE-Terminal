@@ -1,7 +1,13 @@
 import java.security.MessageDigest
 
 plugins { id("com.android.application") }
-val nativeBundleId = MessageDigest.getInstance("SHA-256").digest(rootProject.file("tools/native/runtime-lock.json").readBytes()).joinToString("") { "%02x".format(it) }
+// Keep this ordered input list in sync with scripts/semantic_bundle.py.
+val nativeBundleDigest = MessageDigest.getInstance("SHA-256")
+listOf("tools/native/runtime-lock.json", "tools/native/servers/package.json", "tools/native/servers/package-lock.json", "tools/native/servers/launch.cjs").forEach {
+    nativeBundleDigest.update(rootProject.file(it).readBytes())
+    nativeBundleDigest.update(0.toByte())
+}
+val nativeBundleId = nativeBundleDigest.digest().joinToString("") { "%02x".format(it) }
 android {
     namespace = "com.forgeide.runtime"
     compileSdk = 35
@@ -12,8 +18,8 @@ android {
         minSdk = 26
         // Opt-in sideloaded companion only. Android's compatibility execution policy is required.
         targetSdk = 28
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0-preview.1"
         manifestPlaceholders["forgeBundleId"] = nativeBundleId
         ndk { abiFilters += setOf("arm64-v8a", "x86_64") }
         externalNativeBuild { ndkBuild { arguments += "APP_SUPPORT_FLEXIBLE_PAGE_SIZES=true" } }

@@ -15,6 +15,8 @@ public final class Settings {
     public Settings() {
         for (String tool : List.of("clang", "python", "node", "npm", "bash", "network", "installScripts"))
             global.put("native." + tool, false);
+        for (String server : List.of("clangd", "pyright", "typescript", "bashls", "html", "css", "json"))
+            global.put("native.lsp." + server, false);
         global.put("theme", "system");
         global.put("fontFamily", "monospace");
         global.put("syntaxTheme", "warm");

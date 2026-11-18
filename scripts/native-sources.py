@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import traceback
 import urllib.request
+from semantic_bundle import sources as semantic_sources
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -75,6 +76,7 @@ def build(index_path, output):
         errors = [error for error in executor.map(obtain, index["inputs"]) if error]
     if errors:
         raise ValueError("Missing/corrupt corresponding sources (" + str(len(errors)) + "):\n" + "\n".join(errors))
+    semantic_sources(output / "language-servers")
     shutil.copyfile(index_path, output / "source-lock.json")
     shutil.copyfile(ROOT / "tools/native/runtime-lock.json", output / "native-package-lock.json")
     subprocess.run(["git", "archive", "--format=tar.gz", "--output=" + str((output / "forge-integration-source.tar.gz").resolve()), "HEAD"], cwd=ROOT, check=True)

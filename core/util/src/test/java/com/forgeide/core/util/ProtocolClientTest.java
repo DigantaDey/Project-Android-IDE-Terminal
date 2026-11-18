@@ -19,6 +19,72 @@ public class ProtocolClientTest {
         exchange(true);
     }
 
+    @Test(timeout = 8000)
+    public void cancellationAndTimeoutAreSentToTheServerAndDoNotLeakPendingRequests() throws Exception {
+        PipedInputStream serverInput = new PipedInputStream(65536),
+            hostInput = new PipedInputStream(65536);
+        PipedOutputStream hostOutput = new PipedOutputStream(serverInput),
+            serverOutput = new PipedOutputStream(hostInput);
+        try (ProtocolClient client = new ProtocolClient(hostInput, hostOutput, false, event -> {})) {
+            CompletableFuture<JsonObject> cancelled = client.request("completion", Map.of());
+            JsonObject request = new JsonObject(FramedJson.read(serverInput));
+            cancelled.cancel(true);
+            JsonObject cancel = new JsonObject(FramedJson.read(serverInput));
+            assertEquals("$/cancelRequest", cancel.getString("method", ""));
+            assertEquals(request.getLong("id", -1), cancel.getObject("params").getLong("id", -2));
+            CompletableFuture<JsonObject> timed = client.request("hover", Map.of(), 100);
+            request = new JsonObject(FramedJson.read(serverInput));
+            try {
+                timed.get(2, TimeUnit.SECONDS);
+                fail();
+            } catch (ExecutionException expected) {
+                assertTrue(expected.getCause() instanceof TimeoutException);
+            }
+            cancel = new JsonObject(FramedJson.read(serverInput));
+            assertEquals("$/cancelRequest", cancel.getString("method", ""));
+            assertEquals(request.getLong("id", -1), cancel.getObject("params").getLong("id", -2));
+            // Late responses cannot complete a different request.
+            FramedJson.write(
+                serverOutput,
+                Map.of("jsonrpc", "2.0", "id", request.raw().get("id"), "result", Map.of())
+            );
+            CompletableFuture<JsonObject> finalRequest = client.request("symbols", Map.of());
+            JsonObject last = new JsonObject(FramedJson.read(serverInput));
+            FramedJson.write(
+                serverOutput,
+                Map.of("jsonrpc", "2.0", "id", last.raw().get("id"), "result", Map.of("ok", true))
+            );
+            assertTrue(finalRequest.get(2, TimeUnit.SECONDS).getObject("result").getBoolean("ok", false));
+        } finally {
+            serverInput.close();
+            serverOutput.close();
+        }
+    }
+
+    @Test(timeout = 5000)
+    public void peerDisconnectFailsAllOutstandingRequestsAndFurtherRequestsFailImmediately()
+        throws Exception {
+        PipedInputStream serverInput = new PipedInputStream(65536),
+            hostInput = new PipedInputStream(65536);
+        PipedOutputStream hostOutput = new PipedOutputStream(serverInput),
+            serverOutput = new PipedOutputStream(hostInput);
+        try (ProtocolClient client = new ProtocolClient(hostInput, hostOutput, false, event -> {})) {
+            CompletableFuture<JsonObject> pending = client.request("completion", Map.of());
+            FramedJson.read(serverInput);
+            serverOutput.close();
+            try {
+                pending.get(2, TimeUnit.SECONDS);
+                fail();
+            } catch (ExecutionException expected) {
+                assertTrue(expected.getCause() instanceof EOFException);
+            }
+            assertTrue(client.request("hover", Map.of()).isCompletedExceptionally());
+        } finally {
+            serverInput.close();
+            serverOutput.close();
+        }
+    }
+
     private void exchange(boolean dap) throws Exception {
         PipedInputStream peerInput = new PipedInputStream(16384);
         PipedOutputStream hostOutput = new PipedOutputStream(peerInput);

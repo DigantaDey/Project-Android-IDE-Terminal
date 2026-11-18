@@ -214,7 +214,7 @@ public final class ForgeApplication extends Application {
             "README.md",
             "# " +
                 name +
-                "\n\nA project created in Forge IDE.\n\nThe editor and project tools work offline. The default JavaScript provider is isolated Rhino ES6, not Node.js. For C/C++, CPython, Node.js/npm and a real Bash PTY, install the matching offline native companion APK and enable each tool in Settings. Native tools run in a separate app UID on disposable project copies, with networking off by default. Java SDK and semantic LSP/DAP servers are not bundled.\n"
+                "\n\nA project created in Forge IDE.\n\nThe editor and project tools work offline. The default JavaScript provider is isolated Rhino ES6, not Node.js. For C/C++, CPython, Node.js/npm and a real Bash PTY, install the matching offline native companion APK and enable each tool in Settings. Native tools run in a separate app UID on disposable project copies, with networking off by default. The companion also bundles clangd, Pyright, TypeScript, Bash, HTML/CSS/JSON language servers under independent default-off controls. Other language servers, Java SDK and additional debuggers/DAP servers are not bundled.\n"
         );
     }
 

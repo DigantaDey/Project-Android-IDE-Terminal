@@ -4,6 +4,10 @@ on:
     paths:
       - 'scripts/native-bundle.py'
       - 'scripts/native-sources.py'
+      - 'scripts/semantic_bundle.py'
+      - 'scripts/test_semantic_bundle.py'
+      - 'core/language/**'
+      - 'core/toolchain/src/main/java/com/forgeide/core/toolchain/LanguageServers.java'
       - 'native-runtime/**'
       - 'runtime-api/**'
       - 'app/src/main/java/com/forgeide/app/nativebridge/**'
@@ -20,7 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Verify source inventory and companion security protocol
-        run: python3 -m unittest discover -s scripts -p test_native_tools.py -v
+        run: |
+          python3 -m unittest discover -s scripts -p test_native_tools.py -v
+          python3 -m unittest discover -s scripts -p test_semantic_bundle.py -v
       - name: Resolve signed upstream package metadata
         run: python3 scripts/native-bundle.py lock
       - uses: actions/upload-artifact@v7.0.2

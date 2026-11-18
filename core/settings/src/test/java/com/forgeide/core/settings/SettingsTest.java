@@ -91,6 +91,13 @@ public class SettingsTest {
             "native.bash",
             "native.network",
             "native.installScripts",
+            "native.lsp.clangd",
+            "native.lsp.pyright",
+            "native.lsp.typescript",
+            "native.lsp.bashls",
+            "native.lsp.html",
+            "native.lsp.css",
+            "native.lsp.json",
         }) {
             assertFalse(key, settings.bool(key));
             try {
@@ -99,10 +106,14 @@ public class SettingsTest {
             } catch (IllegalArgumentException expected) {}
         }
         Path file = tmp.newFile().toPath();
-        Files.writeString(file, "{\"native.python\":true,\"native.network\":true,\"fontSize\":18}");
+        Files.writeString(
+            file,
+            "{\"native.python\":true,\"native.network\":true,\"native.lsp.pyright\":true,\"fontSize\":18}"
+        );
         settings.load(file, true);
         assertFalse(settings.bool("native.python"));
         assertFalse(settings.bool("native.network"));
+        assertFalse(settings.bool("native.lsp.pyright"));
         assertEquals(18, settings.integer("fontSize"));
         settings.set("native.python", true, false);
         settings.save(file, false);

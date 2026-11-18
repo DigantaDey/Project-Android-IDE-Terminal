@@ -3,7 +3,7 @@
     <queries><package android:name="com.forgeide.app" /></queries>
     <application android:allowBackup="false" android:label="Forge Native Runtime" android:usesCleartextTraffic="false" android:extractNativeLibs="true">
         <meta-data android:name="forge.native.bundle" android:value="${forgeBundleId}" />
-        <meta-data android:name="forge.native.protocol" android:value="2" />
+        <meta-data android:name="forge.native.protocol" android:value="3" />
         <service android:name=".NativeRuntimeService" android:exported="true" android:stopWithTask="true" android:permission="com.forgeide.app.permission.NATIVE_RUNTIME" />
     </application>
 </manifest>

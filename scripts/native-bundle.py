@@ -21,6 +21,7 @@ import subprocess
 import tempfile
 import traceback
 import urllib.request
+from semantic_bundle import bundle_id, server_records, inventory
 
 ROOT = Path(__file__).resolve().parent.parent
 MIRROR = "https://packages.termux.dev/apt/termux-main/"
@@ -140,10 +141,12 @@ def build(lockfile, destination):
     locked = json.loads(locked_bytes)
     if locked["schema"] != 1 or locked["mirror"] != MIRROR:
         raise ValueError("Unsupported native package lock")
-    bundle_id = hashlib.sha256(locked_bytes).hexdigest()
+    payload_id = bundle_id()
     destination.mkdir(parents=True, exist_ok=True)
-    metadata = {"schema": 1, "id": bundle_id, "architectures": {}}
+    metadata = {"schema": 1, "id": payload_id, "architectures": {}}
     old_prefix = "data/data/com.termux/files/usr/"
+    semantic = list(server_records())
+    metadata["languageServers"] = inventory()
     for arch, info in locked["architectures"].items():
         records = {}
         def relative(name):
@@ -197,11 +200,13 @@ def build(lockfile, destination):
                         raise ValueError("Unsupported package entry type")
             if archive.wait() != 0:
                 raise ValueError("dpkg-deb failed")
-        for required in ("bin/bash", "bin/python", "bin/node", "bin/clang", "bin/clang++", "bin/ld.lld", "lib/node_modules/npm/bin/npm-cli.js"):
+        for name, data in semantic:
+            store(name, "file", data, 0o644)
+        for required in ("bin/clangd", "share/forge-lsp/launch.cjs", "bin/bash", "bin/python", "bin/node", "bin/clang", "bin/clang++", "bin/ld.lld", "lib/node_modules/npm/bin/npm-cli.js"):
             if required not in records:
                 raise ValueError("Missing bundled tool: " + required)
         # Static bootstrap launchers are not needed; the companion never runs package postinst hooks.
-        manifest = {"schema": 1, "id": bundle_id, "files": [], "links": []}
+        manifest = {"schema": 1, "id": payload_id, "files": [], "links": []}
         payload = destination / ("runtime-" + arch + ".zip")
         unpacked = 0
         with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as output:

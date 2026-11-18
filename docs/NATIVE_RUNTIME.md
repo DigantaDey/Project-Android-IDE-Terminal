@@ -8,7 +8,7 @@ or broad storage permission is used.
 
 ## Install and enable
 
-1. Download `forge-ide-offline-bundle` from a successful CI run. Extract it.
+1. Download the offline bundle ZIP from the matching GitHub prerelease (or `forge-ide-offline-bundle` from a successful CI run). Extract it and verify SHA256SUMS.
 2. Install **both** `forge-ide.apk` and `forge-native-runtime.apk` from that same
    bundle with Android's package installer. Android requires explicit sideload
    approval. Do not install an unrelated APK with the same package name.
@@ -54,7 +54,10 @@ compatibility bundle. 32-bit-only and secondary/work-profile installations fail
 explicitly. arm64 binaries are packaged, but x86_64 emulator checks are not a
 physical ARM-device certification.
 
-Java SDK, TypeScript, pip, CMake, semantic LSP/DAP servers, and native debuggers are
+clangd, Pyright, TypeScript Language Server + the JavaScript TypeScript engine,
+Bash Language Server and VS Code HTML/CSS/JSON servers are also bundled with
+independent default-off controls. See [semantic setup and limits](LANGUAGE_SERVERS.md).
+Java SDK, pip, CMake, other language servers, DAP servers and native debuggers are
 not bundled by this extension. npm native add-ons may need additional build tools
 or Android-specific patches; bundling npm does not make every desktop package
 Android compatible.
@@ -68,7 +71,10 @@ before running untrusted code. Copies are bounded to 32 MiB and 2,000 entries.
 There is no silent import or automatic write-back to the IDE. Native file runs
 remove the copy when they finish.
 
-One native file run **or** native PTY can be active at once. The six existing
+One native file run, native PTY **or semantic server family** can be active at once.
+Runs and the PTY preempt background semantic sessions. Semantic servers have their
+own foreground/30-minute lifecycle and always-off network policy; see the linked
+language-server guide. The six existing
 scoped project-shell sessions are unaffected. A PTY keeps its cwd, environment,
 installed packages and files only for that session. Use **terminal menu → Export
 project copy as ZIP** before exit/stop. Exports are explicit SAF writes; no storage
@@ -106,10 +112,12 @@ boundary is a security guarantee.
 The companion package is `com.forgex`, separate from `com.forgeide.app`. Its exact
 length supports relocating upstream's compiled-in prefix without corrupting ELF
 files. Signature permission, calling UID, security-protocol revision and bundle-ID checks protect
-the private Binder protocol. Protocol revision 2 rejects older companions even if
+the private Binder protocol. Protocol revision 3 requires separate raw stdio for language servers and rejects older companions even if
 their tool payload lock happens to match. Install both APKs from one build. No app credential,
 GitHub token, Keystore key, live project FD, or SAF authority is passed to a child.
-The child inherits only its PTY descriptors and an explicit sanitized environment.
+The child inherits only its PTY descriptors (or three raw stdio pipes for LSP) and
+an explicit sanitized environment. Language-server networking is always disabled,
+regardless of the ordinary native-network preference.
 Runtime-generated data and output are untrusted.
 
 This is a **separate regular app UID**, not Android `isolatedProcess`. Native tools
@@ -131,7 +139,10 @@ successful run.
 `python3 scripts/native-bundle.py build` fetches **build-time only**, SHA256-locked
 Termux `.deb` inputs and constructs deterministic APK assets under ignored
 `build/native/`. Catalog refresh is a separate operation: `... lock` first verifies
-InRelease with the vendored public upstream keys. Package maintainer scripts are
+InRelease with the vendored public upstream keys. The same build verifies SHA-512
+locked language-server distributions from the npm registry, extracts their JS/WASM
+resources without invoking npm, and retains their notices. Both locks and the
+server launch recipe participate in the companion compatibility ID. Package maintainer scripts are
 not executed. Prefix relocation and generated per-file/payload hashes are checked
 before the atomic install. Do not put binary payloads into Git.
 
@@ -140,6 +151,7 @@ their respective upstream licenses, not a blanket Forge license. The native APK
 and compiled code have substantial transitive licensing/distribution obligations;
 see `THIRD_PARTY_NOTICES.md`. Download **forge-native-corresponding-sources** from
 the same CI run for the verified copyleft source inputs, GNU patches, complete
-recipe tree, license inventory and this integration's source. This development
+recipe tree, license inventory, all 64 original non-optional language-server npm
+distributions with SHA-512 provenance, and this integration's exact source. This development
 build is not a certification of production store policies or every distribution/
 relinking obligation.

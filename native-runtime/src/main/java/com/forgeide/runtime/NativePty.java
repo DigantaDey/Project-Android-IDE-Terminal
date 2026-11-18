@@ -18,6 +18,9 @@ final class NativePty {
         boolean network
     ) throws IOException;
 
+    static native long[] startStdio(String directory, String[] arguments, String[] environment)
+        throws IOException;
+
     static native int waitFor(int pid);
 
     static native void resize(int fd, int rows, int columns);
