@@ -58,7 +58,8 @@ public final class SandboxDeviceTest {
                 )
             )
         );
-        assertEquals(output.toString(), Integer.valueOf(0), completion.get().get(20, TimeUnit.SECONDS));
+        Integer exit = completion.get().get(20, TimeUnit.SECONDS);
+        assertEquals(output.toString(), Integer.valueOf(0), exit);
         assertTrue(output.toString(), output.toString().contains("42 undefined undefined undefined"));
         JsonObject ready = identity.get();
         assertNotNull("Runtime must report OS isolation identity", ready);
@@ -134,7 +135,8 @@ public final class SandboxDeviceTest {
                 )
             )
         );
-        assertEquals(output.toString(), Integer.valueOf(0), second.get().get(15, TimeUnit.SECONDS));
+        Integer exit = second.get().get(15, TimeUnit.SECONDS);
+        assertEquals(output.toString(), Integer.valueOf(0), exit);
         assertTrue(output.toString().contains("second run"));
     }
 
@@ -171,7 +173,8 @@ public final class SandboxDeviceTest {
                 )
             )
         );
-        assertEquals(output.toString(), Integer.valueOf(0), result.get().get(15, TimeUnit.SECONDS));
+        Integer exit = result.get().get(15, TimeUnit.SECONDS);
+        assertEquals(output.toString(), Integer.valueOf(0), exit);
         assertTrue(output.toString(), output.toString().contains("42"));
     }
 
