@@ -37,3 +37,7 @@ hs_err_pid*.log
 
 # ---- Optional source-formatting tooling ----
 node_modules/
+
+# ---- Python report-tool bytecode ----
+__pycache__/
+*.py[cod]
