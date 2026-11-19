@@ -41,10 +41,25 @@ public final class CommandRegistry {
     }
 
     public List<Command> search(String query) {
+        List<Scored> scored = new ArrayList<>();
+        for (Command c : commands.values()) {
+            FuzzyMatcher.Match m = c.enabled.getAsBoolean() ? FuzzyMatcher.match(query, c.title) : null;
+            if (m != null) scored.add(new Scored(c, m.score));
+        }
+        scored.sort(Comparator.comparingInt((Scored s) -> s.score).reversed());
         List<Command> out = new ArrayList<>();
-        for (Command c : commands.values())
-            if (c.enabled.getAsBoolean() && FuzzyMatcher.match(query, c.title) != null) out.add(c);
-        out.sort(Comparator.comparingInt((Command c) -> FuzzyMatcher.match(query, c.title).score).reversed());
+        for (Scored s : scored) out.add(s.command);
         return out;
+    }
+
+    private static final class Scored {
+
+        final Command command;
+        final int score;
+
+        Scored(Command command, int score) {
+            this.command = command;
+            this.score = score;
+        }
     }
 }

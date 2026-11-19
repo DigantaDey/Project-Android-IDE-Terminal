@@ -287,7 +287,10 @@ public final class NativeRuntimeService extends Service {
             String prefix = payload.prefix.toString();
             Path home = Files.createDirectory(s.root.resolve("home"));
             Path commands = Files.createDirectory(s.root.resolve("bin"));
-            Set<String> enabled = new HashSet<>(Arrays.asList(options.getStringArray("enabled")));
+            String[] enabledArray = options.getStringArray("enabled");
+            Set<String> enabled = new HashSet<>(
+                Arrays.asList(enabledArray == null ? new String[0] : enabledArray)
+            );
             try (DirectoryStream<Path> binaries = Files.newDirectoryStream(payload.prefix.resolve("bin"))) {
                 for (Path binary : binaries) {
                     String name = binary.getFileName().toString();
