@@ -174,8 +174,16 @@ public final class SemanticServerDeviceTest {
         return items.stream().anyMatch(item -> item.label.trim().equals(label));
     }
 
-    private JsonObject diagnostics(int version, boolean nonempty) throws Exception {
+    /**
+     * Waits for a publishDiagnostics event for the open document matching the expected version and
+     * emptiness, plus every content marker. The bundled typescript-language-server omits the
+     * publishDiagnostics version field, so unversioned events are matched by content instead of
+     * being trusted as the requested version; a stale pre-change publish therefore keeps the wait
+     * running instead of satisfying it.
+     */
+    private JsonObject diagnostics(int version, boolean nonempty, String... markers) throws Exception {
         long end = android.os.SystemClock.elapsedRealtime() + 35000;
+        String last = "";
         while (android.os.SystemClock.elapsedRealtime() < end) {
             JsonObject event = events.poll(
                 Math.max(1, end - android.os.SystemClock.elapsedRealtime()),
@@ -186,12 +194,19 @@ public final class SemanticServerDeviceTest {
             if (
                 event.getString("method", "").equals("textDocument/publishDiagnostics") &&
                 params.getString("uri", "").equals(uri) &&
-                params.getInt("version", version) == version &&
+                (!params.has("version") || params.getInt("version", version) == version) &&
                 !params.getArray("diagnostics").isEmpty() == nonempty
-            ) return params;
+            ) {
+                last = params.toJson();
+                boolean complete = true;
+                for (String marker : markers) if (!last.contains(marker)) complete = false;
+                if (complete) return params;
+            }
         }
         throw new AssertionError(
-            "No expected semantic diagnostics for version " + version + "; stderr=" + stderr
+            "No publishDiagnostics for version " + version +
+            (markers.length == 0 ? "" : " containing \"" + String.join("\", \"", markers) + "\"") +
+            "; last seen: " + last + "; stderr=" + stderr
         );
     }
 
@@ -215,7 +230,7 @@ public final class SemanticServerDeviceTest {
         );
         events.clear();
         client.change(uri, 2, "int main(void) { return missing_identifier; }\n");
-        assertTrue(diagnostics(2, true).toJson().contains("missing_identifier"));
+        diagnostics(2, true, "missing_identifier");
     }
 
     @Test
@@ -229,7 +244,7 @@ public final class SemanticServerDeviceTest {
         assertTrue(LspResults.hover(at("hover", 2, 2)).contains("Rocket"));
         assertFalse(LspResults.locations(at("definition", 3, 9), uris).isEmpty());
         client.change(uri, 2, "value: int = 'wrong'\n");
-        assertFalse(diagnostics(2, true).getArray("diagnostics").isEmpty());
+        diagnostics(2, true);
         assertEquals(source, workspace.read("main.py"));
     }
 
@@ -250,7 +265,7 @@ public final class SemanticServerDeviceTest {
         );
         events.clear();
         client.change(uri, 2, "const answer: number = 'wrong';\n");
-        assertTrue(diagnostics(2, true).toJson().contains("2322"));
+        diagnostics(2, true, "2322");
     }
 
     @Test
