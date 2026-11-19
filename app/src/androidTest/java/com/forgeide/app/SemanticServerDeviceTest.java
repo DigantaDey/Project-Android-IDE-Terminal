@@ -204,9 +204,13 @@ public final class SemanticServerDeviceTest {
             }
         }
         throw new AssertionError(
-            "No publishDiagnostics for version " + version +
-            (markers.length == 0 ? "" : " containing \"" + String.join("\", \"", markers) + "\"") +
-            "; last seen: " + last + "; stderr=" + stderr
+            "No publishDiagnostics for version " +
+                version +
+                (markers.length == 0 ? "" : " containing \"" + String.join("\", \"", markers) + "\"") +
+                "; last seen: " +
+                last +
+                "; stderr=" +
+                stderr
         );
     }
 
