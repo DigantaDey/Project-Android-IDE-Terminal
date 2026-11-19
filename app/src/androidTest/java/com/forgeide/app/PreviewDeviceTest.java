@@ -102,13 +102,30 @@ public final class PreviewDeviceTest {
                 web.reload();
             });
             assertTrue("Local HTML must actually load", loaded.await(15, TimeUnit.SECONDS));
+            if (unavailable.get()) {
+                scenario.onActivity(PreviewDeviceTest::assertUnavailable);
+                return;
+            }
+            // Newer WebView builds commit the document title asynchronously after
+            // onPageFinished, so read it on the UI thread until it appears. A page that
+            // never renders still fails the assertion, just after the polling window.
+            java.util.concurrent.atomic.AtomicReference<String> title =
+                new java.util.concurrent.atomic.AtomicReference<>("");
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (System.nanoTime() < deadline) {
+                CountDownLatch read = new CountDownLatch(1);
+                scenario.onActivity(activity -> {
+                    WebView web = activity.findViewById(PreviewActivity.PREVIEW_ID);
+                    title.set(web == null ? "" : web.getTitle());
+                    read.countDown();
+                });
+                read.await();
+                if ("Confined preview fixture".equals(title.get())) break;
+                Thread.sleep(100);
+            }
+            assertEquals("Confined preview fixture", title.get());
             scenario.onActivity(activity -> {
-                if (unavailable.get()) {
-                    assertUnavailable(activity);
-                    return;
-                }
                 WebView web = activity.findViewById(PreviewActivity.PREVIEW_ID);
-                assertEquals("Confined preview fixture", web.getTitle());
                 // Simulate the Android callback; the real HTML must have rendered before recovery.
                 assertTrue(web.getWebViewClient().onRenderProcessGone(web, null));
                 assertUnavailable(activity);
